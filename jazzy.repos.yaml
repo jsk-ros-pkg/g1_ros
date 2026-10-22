@@ -1,13 +1,15 @@
 repositories:
-  mqcmd196/g1_ros:
+  jsk-ros-pkg/g1_ros:
     type: git
-    url: git@github.com:mqcmd196/g1_ros.git
+    url: https://github.com/jsk-ros-pkg/g1_ros.git
     version: master
+  # https://github.com/unitreerobotics/unitree_ros/pull/148
   unitreerobotics/unitree_ros:
     type: git
-    url: git@github.com:mqcmd196/unitree_ros
+    url: https://github.com/mqcmd196/unitree_ros
     version: description-package
+  # https://github.com/unitreerobotics/unitree_sdk2/pull/26
   unitreerobotics/unitree_sdk2:
     type: git
-    url: git@github.com:mqcmd196/unitree_sdk2.git
+    url: https://github.com/mqcmd196/unitree_sdk2.git
     version: add-package-xml
