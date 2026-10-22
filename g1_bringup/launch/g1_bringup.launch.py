@@ -42,9 +42,17 @@ Usage:
   # upper_body_controller inactive while SONIC is in control):
   ros2 launch g1_bringup g1_bringup.launch.py network_interface:=eth0 \
       use_gear_sonic:=true zmq_host:=0.0.0.0
+  # Local MuJoCo + SONIC: hand_type:=auto selects inspire_dfq on loopback.
+  # Balance/control remains gated until enable_control is called after deploy
+  # has connected and the robot has been released.
+  ROS_DOMAIN_ID=1 ros2 launch g1_bringup g1_bringup.launch.py \
+      network_interface:=lo use_gear_sonic:=true zmq_host:=localhost
+  ROS_DOMAIN_ID=1 ros2 service call /gear_sonic_interface/enable_control \
+      std_srvs/srv/SetBool "{data: true}"
   ros2 launch g1_bringup g1_bringup.launch.py network_interface:=eth0 use_d435i:=true
 """
 
+import math
 from pathlib import Path
 
 from ament_index_python.packages import get_package_share_directory
@@ -53,6 +61,7 @@ from launch.actions import (
     DeclareLaunchArgument,
     GroupAction,
     IncludeLaunchDescription,
+    LogInfo,
     OpaqueFunction,
 )
 from launch.launch_description_sources import PythonLaunchDescriptionSource
@@ -89,9 +98,24 @@ _HARDWARE_CONFIG = {
 }
 
 
+def _resolve_hand_type(
+    requested_hand_type: str, network_interface: str, use_gear_sonic: str
+) -> str:
+    """Resolve the safe default while keeping explicit selections authoritative."""
+    if requested_hand_type != "auto":
+        return requested_hand_type
+    if network_interface in ("lo", "lo0") and use_gear_sonic.lower() == "true":
+        return "inspire_dfq"
+    return "no_hand"
+
+
 def _launch_setup(context, *args, **kwargs):
-    hand_type = LaunchConfiguration("hand_type").perform(context)
+    requested_hand_type = LaunchConfiguration("hand_type").perform(context)
     network_interface = LaunchConfiguration("network_interface").perform(context)
+    use_gear_sonic = LaunchConfiguration("use_gear_sonic").perform(context)
+    hand_type = _resolve_hand_type(
+        requested_hand_type, network_interface, use_gear_sonic
+    )
     kp = LaunchConfiguration("kp").perform(context)
     kd = LaunchConfiguration("kd").perform(context)
     waist_kp = LaunchConfiguration("waist_kp").perform(context)
@@ -107,7 +131,6 @@ def _launch_setup(context, *args, **kwargs):
         context
     )
     use_rviz = LaunchConfiguration("use_rviz").perform(context).lower()
-    use_gear_sonic = LaunchConfiguration("use_gear_sonic").perform(context)
     zmq_host = LaunchConfiguration("zmq_host").perform(context)
     left_wrist_compliance = LaunchConfiguration("left_wrist_compliance").perform(
         context
@@ -117,6 +140,28 @@ def _launch_setup(context, *args, **kwargs):
     )
     head_compliance = LaunchConfiguration("head_compliance").perform(context)
     use_d435i = LaunchConfiguration("use_d435i").perform(context).lower()
+    trajectory_start_tolerance_text = LaunchConfiguration(
+        "trajectory_start_tolerance"
+    ).perform(context)
+    if trajectory_start_tolerance_text == "auto":
+        # The SONIC adapter executes Cartesian wrist/torso FK targets.  Its RL
+        # policy is intentionally redundant in joint space, so measured arm
+        # joints may move substantially while the wrist target stays fixed.
+        # MoveIt's joint-space start check is therefore not meaningful for
+        # this controller (0.0 is MoveIt's documented magic value to skip it).
+        trajectory_start_tolerance = (
+            0.0 if use_gear_sonic.lower() == "true" else 0.01
+        )
+    else:
+        trajectory_start_tolerance = float(trajectory_start_tolerance_text)
+    if (
+        not math.isfinite(trajectory_start_tolerance)
+        or trajectory_start_tolerance < 0.0
+        or trajectory_start_tolerance > 0.5
+    ):
+        raise ValueError(
+            "trajectory_start_tolerance must be 'auto' or in [0.0, 0.5] rad"
+        )
 
     cfg = _HARDWARE_CONFIG[hand_type]
 
@@ -165,6 +210,9 @@ def _launch_setup(context, *args, **kwargs):
             ),
         )
     moveit_config = moveit_config_builder.to_moveit_configs()
+    moveit_config.trajectory_execution[
+        "trajectory_execution.allowed_start_tolerance"
+    ] = trajectory_start_tolerance
 
     # Hardware driver (RSP + ros2_control_node + spawners)
     hw_launch = IncludeLaunchDescription(
@@ -204,11 +252,30 @@ def _launch_setup(context, *args, **kwargs):
     ]
 
     actions = [
+        LogInfo(
+            msg=(
+                f"g1_bringup hand_type={hand_type} "
+                f"(requested={requested_hand_type}, interface={network_interface}, "
+                f"trajectory_start_tolerance={trajectory_start_tolerance:.3f} rad)"
+            )
+        ),
         hw_launch,
         *spawners,
         *generate_static_virtual_joint_tfs_launch(moveit_config).entities,
         *generate_move_group_launch(moveit_config).entities,
     ]
+
+    if use_gear_sonic.lower() == "true":
+        actions.insert(
+            1,
+            LogInfo(
+                msg=(
+                    "SONIC balance/control is disabled at launch. After the deploy "
+                    "process is connected and MuJoCo is released, call "
+                    "/gear_sonic_interface/enable_control with SetBool data=true."
+                )
+            ),
+        )
 
     if use_rviz not in ("false", "0"):
         actions.extend(generate_moveit_rviz_launch(moveit_config).entities)
@@ -282,9 +349,12 @@ def generate_launch_description():
         [
             DeclareLaunchArgument(
                 "hand_type",
-                default_value="no_hand",
-                choices=list(_HARDWARE_CONFIG),
-                description="G1 hand configuration",
+                default_value="auto",
+                choices=["auto", *_HARDWARE_CONFIG],
+                description=(
+                    "G1 hand configuration. auto selects inspire_dfq for a "
+                    "loopback SONIC simulation and no_hand otherwise."
+                ),
             ),
             DeclareLaunchArgument(
                 "network_interface",
@@ -329,6 +399,16 @@ def generate_launch_description():
                 "use_rviz",
                 default_value="true",
                 description="Launch RViz with MoveIt plugin",
+            ),
+            DeclareLaunchArgument(
+                "trajectory_start_tolerance",
+                default_value="auto",
+                description=(
+                    "Maximum MoveIt trajectory-start joint error in radians. "
+                    "auto uses 0.0 for the Cartesian SONIC adapter and 0.01 "
+                    "for ordinary joint controllers; 0.0 skips MoveIt's "
+                    "joint-space start check."
+                ),
             ),
             DeclareLaunchArgument(
                 "use_gear_sonic",

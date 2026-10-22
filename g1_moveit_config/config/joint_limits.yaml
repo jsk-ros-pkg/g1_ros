@@ -104,6 +104,71 @@ joint_limits:
     max_velocity: 30.0
     has_acceleration_limits: true
     max_acceleration: 100.0
+  # Inspire DFQ left hand. The URDF limits these joints to 0.5 rad/s but does
+  # not provide acceleration limits, which are required by MoveIt's time
+  # parameterization response adapter. Keep the planner-side limits
+  # conservative; the global 0.1 scaling factors above still apply.
+  L_thumb_proximal_yaw_joint:
+    has_velocity_limits: true
+    max_velocity: 0.5
+    has_acceleration_limits: true
+    max_acceleration: 0.5
+  L_thumb_proximal_pitch_joint:
+    has_velocity_limits: true
+    max_velocity: 0.5
+    has_acceleration_limits: true
+    max_acceleration: 0.5
+  L_index_proximal_joint:
+    has_velocity_limits: true
+    max_velocity: 0.5
+    has_acceleration_limits: true
+    max_acceleration: 0.5
+  L_middle_proximal_joint:
+    has_velocity_limits: true
+    max_velocity: 0.5
+    has_acceleration_limits: true
+    max_acceleration: 0.5
+  L_ring_proximal_joint:
+    has_velocity_limits: true
+    max_velocity: 0.5
+    has_acceleration_limits: true
+    max_acceleration: 0.5
+  L_pinky_proximal_joint:
+    has_velocity_limits: true
+    max_velocity: 0.5
+    has_acceleration_limits: true
+    max_acceleration: 0.5
+  # Inspire DFQ right hand
+  R_thumb_proximal_yaw_joint:
+    has_velocity_limits: true
+    max_velocity: 0.5
+    has_acceleration_limits: true
+    max_acceleration: 0.5
+  R_thumb_proximal_pitch_joint:
+    has_velocity_limits: true
+    max_velocity: 0.5
+    has_acceleration_limits: true
+    max_acceleration: 0.5
+  R_index_proximal_joint:
+    has_velocity_limits: true
+    max_velocity: 0.5
+    has_acceleration_limits: true
+    max_acceleration: 0.5
+  R_middle_proximal_joint:
+    has_velocity_limits: true
+    max_velocity: 0.5
+    has_acceleration_limits: true
+    max_acceleration: 0.5
+  R_ring_proximal_joint:
+    has_velocity_limits: true
+    max_velocity: 0.5
+    has_acceleration_limits: true
+    max_acceleration: 0.5
+  R_pinky_proximal_joint:
+    has_velocity_limits: true
+    max_velocity: 0.5
+    has_acceleration_limits: true
+    max_acceleration: 0.5
   # Left hand
   left_hand_thumb_0_joint:
     has_velocity_limits: true

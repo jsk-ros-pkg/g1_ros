@@ -40,6 +40,7 @@
 #include <geometry_msgs/msg/pose_stamped.hpp>
 #include <geometry_msgs/msg/twist.hpp>
 #include <rclcpp/rclcpp.hpp>
+#include <sensor_msgs/msg/joint_state.hpp>
 #include <std_msgs/msg/float64.hpp>
 #include <std_srvs/srv/set_bool.hpp>
 #include <std_srvs/srv/trigger.hpp>
@@ -151,6 +152,7 @@ private:
   void OnLeftWrist(geometry_msgs::msg::PoseStamped::ConstSharedPtr msg);
   void OnRightWrist(geometry_msgs::msg::PoseStamped::ConstSharedPtr msg);
   void OnHead(geometry_msgs::msg::PoseStamped::ConstSharedPtr msg);
+  void OnUpperBodyJoints(sensor_msgs::msg::JointState::ConstSharedPtr msg);
   void TimerCallback();
 
   // Full-body SMPL streaming (streamed-motion mode), used e.g. to make the robot jump.
@@ -167,7 +169,9 @@ private:
   BuildPlannerMessage(int mode, std::array<float, 3> movement, std::array<float, 3> facing,
                       float speed, float height, const std::array<float, 9>* vr_position = nullptr,
                       const std::array<float, 12>* vr_orientation = nullptr,
-                      const std::array<float, 3>* vr_compliance = nullptr);
+                      const std::array<float, 3>* vr_compliance = nullptr,
+                      const std::array<float, 17>* upper_body_position = nullptr,
+                      const std::array<float, 17>* upper_body_velocity = nullptr);
 
   // Store one endpoint pose (idx: 0 = left wrist, 1 = right wrist, 2 = head/torso)
   // into vr_position_/vr_orientation_, applying the body offset if enabled.
@@ -197,6 +201,7 @@ private:
   rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr left_wrist_sub_;
   rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr right_wrist_sub_;
   rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr head_sub_;
+  rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr upper_body_sub_;
   rclcpp::Subscription<gear_sonic_interfaces::msg::SmplMotion>::SharedPtr smpl_motion_sub_;
   rclcpp::Service<std_srvs::srv::SetBool>::SharedPtr enable_smpl_stream_srv_;
   rclcpp::TimerBase::SharedPtr timer_;
@@ -246,6 +251,18 @@ private:
   bool any_pose_received_{false};                   // true once at least one pose topic arrives
   rclcpp::Time last_pose_time_{0, 0, RCL_ROS_TIME}; // last pose target receive time
   double pose_timeout_{0.5}; // seconds; vr fields dropped if no pose within this window
+
+  // MoveIt trajectory targets in the exact 17-DOF IsaacLab upper-body order
+  // expected by SONIC:
+  //   waist yaw/roll/pitch,
+  //   L/R shoulder pitch, L/R shoulder roll, L/R shoulder yaw,
+  //   L/R elbow, L/R wrist roll, L/R wrist pitch, L/R wrist yaw.
+  // The ROS topic is name-based; OnUpperBodyJoints performs this ordering.
+  std::array<float, 17> upper_body_position_{};
+  std::array<float, 17> upper_body_velocity_{};
+  bool any_upper_body_received_{false};
+  rclcpp::Time last_upper_body_time_{0, 0, RCL_ROS_TIME};
+  double upper_body_timeout_{0.5};
 
   // Graceful arm-lowering ramp duration in the destructor (fixed, not a parameter).
   // Gantry-suspended use is assumed; the robot goes limp after the socket closes.
