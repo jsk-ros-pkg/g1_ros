@@ -1,6 +1,9 @@
 # Default initial positions for g1_29dof_with_hand's ros2_control fake system
 
 initial_positions:
+  waist_yaw_joint: 0
+  waist_roll_joint: 0
+  waist_pitch_joint: 0
   # Left arm
   left_shoulder_pitch_joint: 0
   left_shoulder_roll_joint: 0

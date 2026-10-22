@@ -58,11 +58,14 @@ _MODEL_CONFIG = {
         "urdf_xacro": "g1_inspire_ftp.urdf.xacro",
         "srdf": "g1_inspire_ftp.srdf",
         "ros2_controllers": "ros2_controllers_inspire_ftp.yaml",
+        "hand_controllers": ["right_hand_controller", "left_hand_controller"],
     },
     "inspire_dfq": {
         "urdf_xacro": "g1_inspire_dfq.urdf.xacro",
         "srdf": "g1_inspire_dfq.srdf",
         "ros2_controllers": "ros2_controllers_inspire_dfq.yaml",
+        # Not used by MoveIt, but spawned like g1_bringup does on the real robot
+        "hand_controllers": ["right_hand_controller", "left_hand_controller"],
     },
 }
 
@@ -112,6 +115,10 @@ def _launch_setup(context, *args, **kwargs):
 
     # Spawn controllers
     actions.extend(generate_spawn_controllers_launch(moveit_config).entities)
+    for name in cfg.get("hand_controllers", []):
+        actions.append(
+            Node(package="controller_manager", executable="spawner", arguments=[name])
+        )
 
     # Warehouse DB (conditional on db)
     db = context.launch_configurations.get("db", "false").lower()
