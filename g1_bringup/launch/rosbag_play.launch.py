@@ -48,7 +48,8 @@ Usage:
   # Drive nodes off the bag clock (they need use_sim_time:=true themselves)
   ros2 launch g1_bringup rosbag_play.launch.py bag:=./pick_demo clock:=true
 
-SPACE pauses/resumes; Ctrl-C stops.
+SPACE pauses/resumes; Ctrl-C stops. Headless runs are controlled through
+the /rosbag2_player services instead.
 """
 
 from pathlib import Path
@@ -235,6 +236,14 @@ def _launch_setup(context, *args, **kwargs):
     # their own use_sim_time:=true to follow the bag clock.
     if clock:
         actions.insert(0, SetParameter(name="use_sim_time", value=True))
+
+    # launch's pipe as stdin would disable the player's keyboard controls;
+    # hand it the controlling terminal when there is one.
+    try:
+        with open("/dev/tty"):
+            cmd = ["bash", "-c", 'exec "$0" "$@" < /dev/tty'] + cmd
+    except OSError:
+        pass
 
     actions.append(ExecuteProcess(cmd=cmd, output="screen"))
     return actions
