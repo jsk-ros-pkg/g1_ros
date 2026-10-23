@@ -8,7 +8,7 @@ endif()
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON) # For clang-tidy
 
 find_package(ament_cmake_auto REQUIRED)
-ament_auto_find_build_dependencies()
+ament_auto_find_build_dependencies(REQUIRED audio_common_msgs sound_play_msgs)
 
 # unitree_sdk2 uses a namespaced target, not auto-detectable via ament_auto
 find_package(unitree_sdk2 REQUIRED)
@@ -71,11 +71,21 @@ rclcpp_components_register_node(g1_livox_interface
   EXECUTABLE g1_livox_interface_node
 )
 
+ament_auto_add_library(g1_audio_interface SHARED
+  src/g1_audio_interface.cpp
+)
+target_link_libraries(g1_audio_interface unitree_sdk2)
+rclcpp_components_register_node(g1_audio_interface
+  PLUGIN "g1_hardware::G1AudioInterfaceNode"
+  EXECUTABLE g1_audio_interface_node
+)
+
 install(FILES g1_hardware_plugin.xml
   DESTINATION share/${PROJECT_NAME})
 
 install(
   PROGRAMS
+    scripts/play_audio.py
     scripts/example_sonic_pose.py
     scripts/replay_smpl_motion.py
     scripts/example_smpl_jump
@@ -83,6 +93,11 @@ install(
 )
 
 if(BUILD_TESTING)
+  find_package(ament_cmake_gtest REQUIRED)
+  ament_add_gtest(test_g1_audio_interface test/test_g1_audio_interface.cpp)
+  target_link_libraries(test_g1_audio_interface g1_audio_interface)
+  find_package(ament_cmake_pytest REQUIRED)
+  ament_add_pytest_test(test_play_audio test/test_play_audio.py)
   find_package(ament_lint_auto REQUIRED)
   set(ament_cmake_cppcheck_FOUND TRUE)
   set(ament_cmake_cpplint_FOUND TRUE)

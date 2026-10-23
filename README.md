@@ -60,6 +60,56 @@ To run hand motion demo
 ros2 run g1_bringup inspire_dfx_hand_open_close_demo --ros-args -p hand:=both
 ```
 
+## Audio playback and TTS
+
+Enable `use_audio:=true` on `g1_bringup.launch.py` or `hardware.launch.py`,
+or run only audio (no motion controllers):
+
+```shell
+ros2 run g1_hardware g1_audio_interface_node --ros-args -p network_interface:=eth0
+ros2 run g1_hardware play_audio.py /path/on/this/computer/speech.wav
+ros2 topic pub --once /robotsound sound_play_msgs/msg/SoundRequest "{sound: -3, command: 1, volume: 0.5, arg: 'Hello from G1', arg2: '1'}"
+# Stop this node's PCM playback and discard queued samples:
+ros2 topic pub --once /robotsound sound_play_msgs/msg/SoundRequest "{sound: -1, command: 0}"
+```
+
+Install only the interface packages:
+`sudo apt install ros-jazzy-audio-common-msgs ros-jazzy-sound-play-msgs`.
+The playback implementation uses Unitree SDK, not `audio_play` or `sound_play`.
+
+| Input topic | Type | Supported data |
+| --- | --- | --- |
+| `audio` | `audio_common_msgs/msg/AudioData` | Headerless **16000 Hz, mono, signed 16-bit little-endian PCM** |
+| `audio_info` | `audio_common_msgs/msg/AudioInfo` | Optional: `channels: 1`, `sample_rate: 16000`, `sample_format: S16LE`, `coding_format: wave` |
+| `robotsound` | `sound_play_msgs/msg/SoundRequest` | `SAY (-3)` / `PLAY_ONCE (1)`; `ALL (-1)` / `PLAY_STOP (0)` stops PCM only |
+
+Following [audio_common ROS 2](https://github.com/ros-drivers/audio_common/tree/ros2),
+`format: wave` means raw PCM on the topic, **not a RIFF/WAV file**.
+The file publisher validates WAV and strips its header. Convert other formats first:
+`ffmpeg -i input.mp3 -ar 16000 -ac 1 -c:a pcm_s16le speech.wav`.
+Direct publishers must send complete two-byte samples, preferably 3200 bytes at 10 Hz.
+The node paces transmission and rejects messages exceeding its 10-second pending buffer.
+There is no resampling/MP3 decoding. Incompatible metadata blocks PCM until valid
+metadata arrives; without metadata, the sender must ensure the format.
+Metadata uses reliable, transient-local QoS; commands/data use reliable, volatile
+QoS with depth 10. Use one audio producer at a time.
+
+Read-only startup parameters are `format=wave`, `sample_format=S16LE`,
+`sample_rate=16000`, `channels=1`, `depth=16` (other formats are rejected),
+`app_name=g1_ros`, and `speaker_id=1`. Use distinct app names for separate nodes.
+TTS `arg` is text; `arg2` is `0` (Chinese), `1` (English), or empty (use `speaker_id`).
+For Japanese, synthesize externally and send PCM. `volume` is 0–1 and changes the
+robot's **global** volume, including subsequent PCM. TTS clears pending PCM.
+Avoid overlapping TTS and PCM: the SDK exposes neither TTS completion nor cancellation.
+
+This supports a subset of `sound_play`: `PLAY_FILE`, looping, and built-in sounds
+are rejected; no completion/cancellation action or custom service is provided.
+Use `play_audio.py` for files. SDK errors are logged; topic delivery does not
+acknowledge playback. A failed stop blocks PCM until another stop succeeds.
+EOF does not stop playback, allowing the robot's buffered audio to finish.
+See the [Unitree example](https://github.com/unitreerobotics/unitree_sdk2/blob/main/example/g1/audio/g1_audio_client_example.cpp)
+and [client API](https://github.com/unitreerobotics/unitree_sdk2/blob/main/include/unitree/robot/g1/audio/g1_audio_client.hpp).
+
 ## gear_sonic (SONIC) locomotion
 
 `g1_hardware` provides `gear_sonic_interface`, a bridge that sends locomotion, VR 3-point upper-body and SMPL-motion commands to the [GR00T-WholeBodyControl](https://github.com/NVlabs/GR00T-WholeBodyControl) (SONIC) deploy stack over ZMQ, and `gear_sonic_controller`, a `FollowJointTrajectory` action server that lets MoveIt execute trajectories through SONIC (FK → VR 3-point targets). Enable both with `use_gear_sonic:=true` on `hardware.launch.py` or `g1_bringup.launch.py`.
