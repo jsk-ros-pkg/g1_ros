@@ -1,0 +1,23 @@
+[Unit]
+Description=Unitree G1 ROS 2 Interaction
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=simple
+User=unitree
+WorkingDirectory=/home/unitree
+
+ExecStartPre=-/usr/bin/docker rm -f g1-interaction
+
+# Connect the speaker before starting. ALSA runs directly through /dev/snd.
+ExecStart=/usr/bin/docker run --rm --init --name g1-interaction --env ROS_DOMAIN_ID=164 --env FASTDDS_BUILTIN_TRANSPORTS=LARGE_DATA --network host --ipc host --device /dev/snd ghcr.io/mqcmd196/g1_ros:latest bash -lc 'source /root/target_ws/install/setup.bash && exec ros2 launch g1_bringup interaction.launch.py'
+
+ExecStop=-/usr/bin/docker stop -s SIGINT --time 30 g1-interaction
+
+# Started by robot bringup or manually; do not retry on failure.
+Restart=no
+TimeoutStopSec=45
+
+StandardOutput=journal
+StandardError=journal

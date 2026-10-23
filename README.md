@@ -10,7 +10,7 @@ Then build the packages.
 source /opt/ros/<ROS DISTRO>/setup.bash
 mkdir -p <colcon workspace>/src
 cd <colcon workspace>/src
-wget https://raw.githubusercontent.com/mqcmd196/g1_ros/refs/heads/master/jazzy.repos.yaml -O- | vcs import
+wget https://raw.githubusercontent.com/jsk-ros-pkg/g1_ros/refs/heads/master/jazzy.repos.yaml -O- | vcs import
 sudo apt update && rosdep update && rosdep install -iqry --from-paths .
 cd ..
 colcon build --symlink-install --packages-up-to g1_bringup
@@ -125,7 +125,8 @@ The `etc/` directory mirrors the layout under `/etc` on the robot. `etc/systemd/
 |---|---|---|
 | `inspire-g1.service` | Inspire RH56DFX hand service (`inspire_g1`) | disabled (pulled in by the bringup) |
 | `gear-sonic.service` | SONIC deploy stack (`gear_sonic_deploy/deploy.sh`) | disabled (pulled in by the bringup) |
-| `ros2-g1-gear-sonic-bringup.service` | `g1_bringup` in the `ghcr.io/mqcmd196/g1_ros` container via `rocker` | manual |
+| `ros2-g1-gear-sonic-bringup.service` | `g1_bringup` in the `ghcr.io/jsk-ros-pkg/g1_ros:latest` container via `rocker` | manual |
+| `ros-interaction.service` | `interaction.launch.py` (`sound_play`) in a separate container with ALSA device access | disabled (pulled in by the bringup) |
 
 `etc/sysctl/` holds kernel tuning the DDS middleware needs:
 
@@ -151,22 +152,39 @@ ansible-playbook -i <robot-host>, -u unitree --become \
     etc/install.yml
 ```
 
-No unit autostarts at boot. `ros2-g1-gear-sonic-bringup.service` pulls in `gear-sonic.service` and `inspire-g1.service` via `Requires=`, so starting the bringup starts all three.
+No unit autostarts at boot. `ros2-g1-gear-sonic-bringup.service` pulls in `gear-sonic.service` and `inspire-g1.service` via `Requires=`, and `ros-interaction.service` via `Wants=`, so starting the bringup starts all four. Interaction startup failure does not prevent robot bringup.
 
 ### Start / stop
 
 ```shell
-# Start SONIC + Inspire hand + the ROS bringup (pulled in via Requires=)
+# Start SONIC + Inspire hand + interaction + the ROS bringup
 sudo systemctl start ros2-g1-gear-sonic-bringup
 # Stop
-sudo systemctl stop ros2-g1-gear-sonic-bringup gear-sonic inspire-g1
+sudo systemctl stop ros2-g1-gear-sonic-bringup gear-sonic inspire-g1 ros-interaction
 # Follow logs
 journalctl -u ros2-g1-gear-sonic-bringup -f
 journalctl -u gear-sonic -f
 ```
 
 > [!NOTE]
-> `ros2-g1-gear-sonic-bringup.service` runs the `ghcr.io/mqcmd196/g1_ros` container image (built from `master`), not your local workspace. Rebuild/pull the image to pick up changes that are merged to `master`.
+> `ros2-g1-gear-sonic-bringup.service` runs the `ghcr.io/jsk-ros-pkg/g1_ros:latest` container image (built from `master`), not your local workspace. After changes are merged to `master` and CI finishes publishing the image, run `docker pull ghcr.io/jsk-ros-pkg/g1_ros:latest` before starting the service to pick up those changes.
+
+### Interaction (USB speaker)
+
+`ros-interaction.service` runs `sound_play` through ALSA (`/dev/snd`). Connect the
+USB speaker before starting; stop the service before unplugging it. Hotplug and
+automatic restart are not supported. Use a rebuilt container image containing
+`interaction.launch.py` and `sound_play`.
+
+```shell
+sudo systemctl start ros-interaction
+journalctl -u ros-interaction -f
+sudo systemctl stop ros-interaction
+```
+
+The ALSA device defaults to `default`. To change it, find the device with `aplay -L`,
+append `sound_device:=plughw:CARD=Speaker,DEV=0` (using your card name) to the service's
+`ros2 launch` command, then run `sudo systemctl daemon-reload` and restart the service.
 
 ## Contribution
 
