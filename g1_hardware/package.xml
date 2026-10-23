@@ -26,6 +26,7 @@
   <depend>tf2_ros</depend>
   <depend>trajectory_msgs</depend>
   <depend>unitree_sdk2</depend>
+  <exec_depend>rclpy</exec_depend>
   <exec_depend>g1_description</exec_depend>
   <exec_depend>controller_manager</exec_depend>
   <exec_depend>joint_state_broadcaster</exec_depend>
@@ -35,6 +36,7 @@
   <exec_depend>ros2_control</exec_depend>
   <exec_depend>ros2launch</exec_depend>
   <test_depend>ament_cmake_gtest</test_depend>
+  <test_depend>ament_cmake_pytest</test_depend>
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>
   <test_depend>ament_cmake_clang_format</test_depend>

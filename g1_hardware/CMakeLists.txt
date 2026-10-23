@@ -85,6 +85,7 @@ install(FILES g1_hardware_plugin.xml
 
 install(
   PROGRAMS
+    scripts/play_audio.py
     scripts/example_sonic_pose.py
     scripts/replay_smpl_motion.py
     scripts/example_smpl_jump
@@ -95,6 +96,8 @@ if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)
   ament_add_gtest(test_g1_audio_interface test/test_g1_audio_interface.cpp)
   target_link_libraries(test_g1_audio_interface g1_audio_interface)
+  find_package(ament_cmake_pytest REQUIRED)
+  ament_add_pytest_test(test_play_audio test/test_play_audio.py)
   find_package(ament_lint_auto REQUIRED)
   set(ament_cmake_cppcheck_FOUND TRUE)
   set(ament_cmake_cpplint_FOUND TRUE)
