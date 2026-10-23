@@ -185,7 +185,18 @@ def _launch_setup(context, *args, **kwargs):
             )
         )
 
+    audio_nodes = []
+    if LaunchConfiguration("use_audio").perform(context).lower() == "true":
+        audio_nodes.append(
+            Node(
+                package="g1_hardware",
+                executable="g1_audio_interface_node",
+                parameters=[{"network_interface": network_interface}],
+            )
+        )
+
     return [
+        *audio_nodes,
         Node(
             package="controller_manager",
             executable="ros2_control_node",
@@ -256,6 +267,12 @@ def generate_launch_description():
                 default_value="true",
                 choices=["true", "false"],
                 description="Close RH56DFX hands when the hardware interface deactivates",
+            ),
+            DeclareLaunchArgument(
+                "use_audio",
+                default_value="false",
+                choices=["true", "false"],
+                description="Start the G1 PCM playback and TTS interface",
             ),
             DeclareLaunchArgument(
                 "use_gear_sonic",
