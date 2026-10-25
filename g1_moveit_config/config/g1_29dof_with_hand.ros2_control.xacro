@@ -7,6 +7,28 @@
         <!-- By default, set up controllers for simulation. This won't work on real hardware -->
         <plugin>mock_components/GenericSystem</plugin>
       </hardware>
+      <!-- Waist joints -->
+      <joint name="waist_yaw_joint">
+        <command_interface name="position"/>
+        <state_interface name="position">
+          <param name="initial_value">${initial_positions['waist_yaw_joint']}</param>
+        </state_interface>
+        <state_interface name="velocity"/>
+      </joint>
+      <joint name="waist_roll_joint">
+        <command_interface name="position"/>
+        <state_interface name="position">
+          <param name="initial_value">${initial_positions['waist_roll_joint']}</param>
+        </state_interface>
+        <state_interface name="velocity"/>
+      </joint>
+      <joint name="waist_pitch_joint">
+        <command_interface name="position"/>
+        <state_interface name="position">
+          <param name="initial_value">${initial_positions['waist_pitch_joint']}</param>
+        </state_interface>
+        <state_interface name="velocity"/>
+      </joint>
       <!-- Left arm joints -->
       <joint name="left_shoulder_pitch_joint">
         <command_interface name="position"/>
