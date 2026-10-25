@@ -124,6 +124,14 @@
     <disable_collisions link1="right_knee_link" link2="right_ankle_pitch_link" reason="Adjacent"/>
     <disable_collisions link1="right_ankle_pitch_link" link2="right_ankle_roll_link" reason="Adjacent"/>
 
+    <!-- The DFQ attention pose leaves the right thumb mesh touching the hip
+         mesh by only a few tens of micrometres.  Treat that numerical contact
+         as a default-pose pair so a collision-free arm motion can leave the
+         attention pose; all other hand-to-body pairs remain checked. -->
+    <disable_collisions link1="right_hip_yaw_link" link2="R_thumb_intermediate" reason="Default"/>
+    <disable_collisions link1="right_hip_yaw_link" link2="R_thumb_distal" reason="Default"/>
+    <disable_collisions link1="right_hip_roll_link" link2="R_thumb_proximal" reason="Default"/>
+
     <!-- Waist (pelvis -> waist_yaw_link -> waist_roll_link -> torso_link) -->
     <disable_collisions link1="pelvis" link2="waist_yaw_link" reason="Adjacent"/>
     <disable_collisions link1="waist_yaw_link" link2="waist_roll_link" reason="Adjacent"/>

@@ -41,6 +41,10 @@
  *   3. The three poses are published to the gear_sonic_interface target
  *      topics; gear_sonic_interface converts them to policy keypoints
  *      (vr_3point_body_offset) and streams them to the SONIC deploy stack.
+ *   4. The same sampled 17-DOF upper-body joint reference is published by
+ *      name. SONIC uses it as the motion-joint reference while VR keypoints
+ *      remain the end-effector task, preventing the policy from choosing a
+ *      very different arm branch with the same approximate wrist position.
  *
  * The RL policy will generally realise DIFFERENT joint angles than the
  * commanded trajectory — only the end-effector (wrist) and torso poses are
@@ -49,8 +53,10 @@
  *
  * After a trajectory finishes the last FK targets are held (published every
  * tick) so that gear_sonic_interface's pose_timeout does not release VR
- * tracking. Chain joints that are not part of the trajectory are frozen at
- * their current /joint_states values when the goal is accepted.
+ * tracking. Call ~/release_targets after a task to stop that hold and let the
+ * SONIC interface time out back to its natural attention policy. Chain joints
+ * that are not part of the trajectory are frozen at their current
+ * /joint_states values when the goal is accepted.
  *
  * ── Virtual base-height DOF (squat planning) ───────────────────────────────
  * If the trajectory contains height_joint (default "pelvis_height_joint" —
@@ -80,12 +86,15 @@
  *   target_topic_right (string, default "/gear_sonic_interface/target_right_wrist_yaw_link")
  *   target_topic_torso (string, default "/gear_sonic_interface/target_torso_link")
  *   target_topic_height (string, default "/gear_sonic_interface/target_height")
+ *   target_topic_upper_body (string, default
+ *       "/gear_sonic_interface/target_upper_body_joints")
  *   height_joint       (string, default "pelvis_height_joint")
  *   lift_base_link     (string, default "pelvis_lift_base") — TF parent for the lift joint
  *   publish_lift_tf    (bool, default false) — broadcast lift TF from this node
  *   standing_height    (double, default 0.789 m — kplanner default_height)
  *   squat_mode_service (string, default "/gear_sonic_interface/mode/idle_squat")
  *   default_mode_service (string, default "/gear_sonic_interface/mode/default")
+ *   release service      ~/release_targets (std_srvs/srv/Trigger)
  */
 
 #include <algorithm>
@@ -158,6 +167,10 @@ public:
     default_mode_cli_ = create_client<std_srvs::srv::Trigger>(declare_parameter(
         "default_mode_service", std::string("/gear_sonic_interface/mode/default")));
     joint_state_pub_ = create_publisher<sensor_msgs::msg::JointState>("/joint_states", 10);
+    upper_body_pub_ = create_publisher<sensor_msgs::msg::JointState>(
+        declare_parameter("target_topic_upper_body",
+                          std::string("/gear_sonic_interface/target_upper_body_joints")),
+        1);
     if (declare_parameter("publish_lift_tf", false)) {
       tf_broadcaster_ = std::make_unique<tf2_ros::TransformBroadcaster>(*this);
     }
@@ -183,6 +196,29 @@ public:
         },
         [](std::shared_ptr<GoalHandleFJT>) { return rclcpp_action::CancelResponse::ACCEPT; },
         [this](std::shared_ptr<GoalHandleFJT> goal_handle) { HandleAccepted(goal_handle); });
+
+    release_targets_srv_ = create_service<std_srvs::srv::Trigger>(
+        "~/release_targets",
+        [this](const std::shared_ptr<std_srvs::srv::Trigger::Request>,
+               std::shared_ptr<std_srvs::srv::Trigger::Response> response) {
+          std::lock_guard<std::mutex> lock(mutex_);
+          if (active_goal_) {
+            response->success = false;
+            response->message =
+                "Cannot release SONIC targets while a trajectory is active";
+            return;
+          }
+          holding_ = false;
+          trajectory_.points.clear();
+          joint_cmd_.clear();
+          joint_vel_cmd_.clear();
+          response->success = true;
+          response->message =
+              "Stopped FK target publication; SONIC may return to attention";
+          RCLCPP_INFO(
+              get_logger(),
+              "Released held FK targets; waiting for gear_sonic_interface pose timeout.");
+        });
 
     const auto period = std::chrono::duration<double>(1.0 / publish_rate);
     timer_ = create_wall_timer(period, [this]() { Tick(); });
@@ -292,6 +328,9 @@ private:
           joint_cmd_[joint] = 0.0;
         }
       }
+      if (std::find(names.begin(), names.end(), joint) == names.end()) {
+        joint_vel_cmd_[joint] = 0.0;
+      }
     }
     active_goal_ = goal_handle;
     trajectory_ = goal_handle->get_goal()->trajectory;
@@ -328,10 +367,18 @@ private:
 
     for (size_t j = 0; j < trajectory_.joint_names.size(); ++j) {
       double q = pts[seg].positions[j];
+      double dq = 0.0;
       if (alpha > 0.0 && seg + 1 < pts.size()) {
         q += alpha * (pts[seg + 1].positions[j] - q);
       }
+      if (!finished && seg + 1 < pts.size()) {
+        const double dt = tfs(pts[seg + 1]) - tfs(pts[seg]);
+        if (dt > 1e-9) {
+          dq = (pts[seg + 1].positions[j] - pts[seg].positions[j]) / dt;
+        }
+      }
       joint_cmd_[trajectory_.joint_names[j]] = q;
+      joint_vel_cmd_[trajectory_.joint_names[j]] = dq;
     }
     return finished;
   }
@@ -361,6 +408,41 @@ private:
                             msg.pose.orientation.w);
       ctx.pub->publish(msg);
     }
+  }
+
+  void PublishUpperBodyTargets()
+  {
+    // Exact SONIC IsaacLab upper-body order. Keep names in the message so the
+    // interface independently validates and orders the data before packing ZMQ.
+    static constexpr std::array<const char*, 17> kJointNames{
+        "waist_yaw_joint",          "waist_roll_joint",          "waist_pitch_joint",
+        "left_shoulder_pitch_joint", "right_shoulder_pitch_joint",
+        "left_shoulder_roll_joint",  "right_shoulder_roll_joint",
+        "left_shoulder_yaw_joint",   "right_shoulder_yaw_joint",
+        "left_elbow_joint",          "right_elbow_joint",
+        "left_wrist_roll_joint",     "right_wrist_roll_joint",
+        "left_wrist_pitch_joint",    "right_wrist_pitch_joint",
+        "left_wrist_yaw_joint",      "right_wrist_yaw_joint"};
+
+    sensor_msgs::msg::JointState msg;
+    msg.header.stamp = now();
+    msg.name.reserve(kJointNames.size());
+    msg.position.reserve(kJointNames.size());
+    msg.velocity.reserve(kJointNames.size());
+    for (const char* name : kJointNames) {
+      const auto pos = joint_cmd_.find(name);
+      if (pos == joint_cmd_.end()) {
+        RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 5000,
+                             "Cannot publish SONIC upper-body reference: joint '%s' has no target.",
+                             name);
+        return;
+      }
+      const auto vel = joint_vel_cmd_.find(name);
+      msg.name.emplace_back(name);
+      msg.position.push_back(pos->second);
+      msg.velocity.push_back(vel != joint_vel_cmd_.end() ? vel->second : 0.0);
+    }
+    upper_body_pub_->publish(msg);
   }
 
   void UpdateSquatMode(double lift_q)
@@ -433,6 +515,7 @@ private:
 
     // Publish every tick (also while holding) so gear_sonic_interface's
     // pose_timeout does not release VR tracking between goals.
+    PublishUpperBodyTargets();
     PublishFkTargets();
 
     std_msgs::msg::Float64 height;
@@ -451,6 +534,7 @@ private:
   bool squat_mode_{false};
   rclcpp::Publisher<std_msgs::msg::Float64>::SharedPtr height_pub_;
   rclcpp::Publisher<sensor_msgs::msg::JointState>::SharedPtr joint_state_pub_;
+  rclcpp::Publisher<sensor_msgs::msg::JointState>::SharedPtr upper_body_pub_;
   rclcpp::Client<std_srvs::srv::Trigger>::SharedPtr squat_mode_cli_;
   rclcpp::Client<std_srvs::srv::Trigger>::SharedPtr default_mode_cli_;
   std::unique_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster_;
@@ -458,6 +542,7 @@ private:
   rclcpp::Subscription<std_msgs::msg::String>::SharedPtr robot_description_sub_;
   rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr joint_state_sub_;
   rclcpp_action::Server<FollowJointTrajectory>::SharedPtr action_server_;
+  rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr release_targets_srv_;
   rclcpp::TimerBase::SharedPtr timer_;
 
   std::mutex mutex_;
@@ -466,6 +551,7 @@ private:
   std::set<std::string> known_joints_;
   std::map<std::string, double> latest_joint_states_;
   std::map<std::string, double> joint_cmd_;
+  std::map<std::string, double> joint_vel_cmd_;
   std::shared_ptr<GoalHandleFJT> active_goal_;
   trajectory_msgs::msg::JointTrajectory trajectory_;
   rclcpp::Time start_time_;

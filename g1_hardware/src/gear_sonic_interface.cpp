@@ -70,6 +70,7 @@ GearSonicInterface::GearSonicInterface(const rclcpp::NodeOptions& options)
   const double publish_rate = declare_parameter("publish_rate", 50.0);
   cmd_vel_timeout_ = declare_parameter("cmd_vel_timeout", 0.5);
   pose_timeout_ = declare_parameter("pose_timeout", 0.5);
+  upper_body_timeout_ = declare_parameter("upper_body_timeout", 0.5);
   smpl_window_size_ = static_cast<size_t>(declare_parameter("smpl_window_size", 5));
   apply_body_offset_ = declare_parameter("apply_vr_3point_body_offset", true);
   // End-effector tracking compliance per keypoint, each 0.0-1.0; 0 = stiff.
@@ -149,6 +150,9 @@ GearSonicInterface::GearSonicInterface(const rclcpp::NodeOptions& options)
   head_sub_ = create_subscription<geometry_msgs::msg::PoseStamped>(
       "~/target_torso_link", 1,
       [this](geometry_msgs::msg::PoseStamped::ConstSharedPtr msg) { OnHead(msg); });
+  upper_body_sub_ = create_subscription<sensor_msgs::msg::JointState>(
+      "~/target_upper_body_joints", 1,
+      [this](sensor_msgs::msg::JointState::ConstSharedPtr msg) { OnUpperBodyJoints(msg); });
 
   // Full-body SMPL streaming (streamed-motion mode), used e.g. for jumps.
   enable_smpl_stream_srv_ = create_service<std_srvs::srv::SetBool>(
@@ -362,6 +366,51 @@ void GearSonicInterface::OnHead(geometry_msgs::msg::PoseStamped::ConstSharedPtr 
   StoreTargetPose(2, *msg);
 }
 
+void GearSonicInterface::OnUpperBodyJoints(sensor_msgs::msg::JointState::ConstSharedPtr msg)
+{
+  // SONIC's upper_body_position field is not in URDF/MuJoCo order. It is the
+  // following IsaacLab upper-body order (policy_parameters.hpp). Accept a
+  // name-based JointState so callers cannot silently use the wrong ordering.
+  static constexpr std::array<const char*, 17> kJointNames{
+      "waist_yaw_joint",          "waist_roll_joint",          "waist_pitch_joint",
+      "left_shoulder_pitch_joint", "right_shoulder_pitch_joint",
+      "left_shoulder_roll_joint",  "right_shoulder_roll_joint",
+      "left_shoulder_yaw_joint",   "right_shoulder_yaw_joint",
+      "left_elbow_joint",          "right_elbow_joint",
+      "left_wrist_roll_joint",     "right_wrist_roll_joint",
+      "left_wrist_pitch_joint",    "right_wrist_pitch_joint",
+      "left_wrist_yaw_joint",      "right_wrist_yaw_joint"};
+
+  std::array<float, 17> positions{};
+  std::array<float, 17> velocities{};
+  for (size_t target = 0; target < kJointNames.size(); ++target) {
+    const auto it = std::find(msg->name.begin(), msg->name.end(), kJointNames[target]);
+    if (it == msg->name.end()) {
+      RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 5000,
+                           "Ignoring incomplete upper-body target: missing joint '%s'.",
+                           kJointNames[target]);
+      return;
+    }
+    const size_t source = static_cast<size_t>(std::distance(msg->name.begin(), it));
+    if (source >= msg->position.size() || !std::isfinite(msg->position[source])) {
+      RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 5000,
+                           "Ignoring invalid upper-body target for joint '%s'.",
+                           kJointNames[target]);
+      return;
+    }
+    positions[target] = static_cast<float>(msg->position[source]);
+    if (source < msg->velocity.size() && std::isfinite(msg->velocity[source])) {
+      velocities[target] = static_cast<float>(msg->velocity[source]);
+    }
+  }
+
+  std::lock_guard<std::mutex> lock(data_mutex_);
+  upper_body_position_ = positions;
+  upper_body_velocity_ = velocities;
+  any_upper_body_received_ = true;
+  last_upper_body_time_ = now();
+}
+
 void GearSonicInterface::TimerCallback()
 {
   // Poll XPUB subscription frames (non-blocking).
@@ -415,6 +464,17 @@ void GearSonicInterface::TimerCallback()
                 "No pose target for %.2f s: VR 3-point tracking released "
                 "(deploy reverts to the planner reference motion).",
                 pose_timeout_);
+  }
+
+  if (any_upper_body_received_ && upper_body_timeout_ > 0.0 &&
+      (now() - last_upper_body_time_).seconds() > upper_body_timeout_)
+  {
+    any_upper_body_received_ = false;
+    upper_body_position_.fill(0.0f);
+    upper_body_velocity_.fill(0.0f);
+    RCLCPP_INFO(get_logger(),
+                "No upper-body joint target for %.2f s: SONIC joint-reference tracking released.",
+                upper_body_timeout_);
   }
 
   // ── Locomotion: convert cmd_vel (body frame) to movement/facing (world frame) ──
@@ -532,13 +592,16 @@ void GearSonicInterface::TimerCallback()
   // Endpoints that have not been published yet keep their default values (set in the
   // header: natural standing pose in pelvis frame), so a single-topic publisher works.
   const float height = static_cast<float>(target_height_);
-  std::vector<uint8_t> msg;
-  if (any_pose_received_) {
-    msg = BuildPlannerMessage(active_mode, movement, facing, speed, height, &vr_position_,
-                              &vr_orientation_, &vr_compliance_);
-  } else {
-    msg = BuildPlannerMessage(active_mode, movement, facing, speed, height);
-  }
+  const auto* vr_position = any_pose_received_ ? &vr_position_ : nullptr;
+  const auto* vr_orientation = any_pose_received_ ? &vr_orientation_ : nullptr;
+  const auto* vr_compliance = any_pose_received_ ? &vr_compliance_ : nullptr;
+  const auto* upper_body_position =
+      any_upper_body_received_ ? &upper_body_position_ : nullptr;
+  const auto* upper_body_velocity =
+      any_upper_body_received_ ? &upper_body_velocity_ : nullptr;
+  const auto msg = BuildPlannerMessage(active_mode, movement, facing, speed, height, vr_position,
+                                       vr_orientation, vr_compliance, upper_body_position,
+                                       upper_body_velocity);
   zmq_sock_->send(zmq::buffer(msg), zmq::send_flags::dontwait);
 }
 
@@ -579,7 +642,9 @@ std::vector<uint8_t> GearSonicInterface::BuildCommandMessage(bool start, bool st
 std::vector<uint8_t> GearSonicInterface::BuildPlannerMessage(
     int mode, std::array<float, 3> movement, std::array<float, 3> facing, float speed, float height,
     const std::array<float, 9>* vr_position, const std::array<float, 12>* vr_orientation,
-    const std::array<float, 3>* vr_compliance)
+    const std::array<float, 3>* vr_compliance,
+    const std::array<float, 17>* upper_body_position,
+    const std::array<float, 17>* upper_body_velocity)
 {
   std::string fields = "[{\"name\":\"mode\",\"dtype\":\"i32\",\"shape\":[1]},"
                        "{\"name\":\"movement\",\"dtype\":\"f32\",\"shape\":[3]},"
@@ -594,6 +659,12 @@ std::vector<uint8_t> GearSonicInterface::BuildPlannerMessage(
   }
   if (vr_compliance) {
     fields += ",{\"name\":\"vr_compliance\",\"dtype\":\"f32\",\"shape\":[3]}";
+  }
+  if (upper_body_position) {
+    fields += ",{\"name\":\"upper_body_position\",\"dtype\":\"f32\",\"shape\":[17]}";
+  }
+  if (upper_body_velocity) {
+    fields += ",{\"name\":\"upper_body_velocity\",\"dtype\":\"f32\",\"shape\":[17]}";
   }
   fields += "]";
 
@@ -630,6 +701,16 @@ std::vector<uint8_t> GearSonicInterface::BuildPlannerMessage(
   }
   if (vr_compliance) {
     for (float v : *vr_compliance) {
+      append(msg, &v, 4);
+    }
+  }
+  if (upper_body_position) {
+    for (float v : *upper_body_position) {
+      append(msg, &v, 4);
+    }
+  }
+  if (upper_body_velocity) {
+    for (float v : *upper_body_velocity) {
       append(msg, &v, 4);
     }
   }
