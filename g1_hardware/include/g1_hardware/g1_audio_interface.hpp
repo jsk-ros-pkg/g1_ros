@@ -34,7 +34,6 @@
 #include <deque>
 #include <memory>
 #include <string>
-#include <vector>
 
 #include <audio_common_msgs/msg/audio_data.hpp>
 #include <audio_common_msgs/msg/audio_info.hpp>
@@ -43,22 +42,12 @@
 
 namespace g1_hardware
 {
-class AudioBackend
-{
-public:
-  virtual ~AudioBackend() = default;
-  virtual int32_t Play(const std::string& app, const std::string& stream,
-                       const std::vector<uint8_t>& pcm) = 0;
-  virtual int32_t Stop(const std::string& app) = 0;
-  virtual int32_t Say(const std::string& text, int32_t speaker) = 0;
-  virtual int32_t SetVolume(uint8_t volume) = 0;
-};
+class SdkAudioClient;
 
 class G1AudioInterfaceNode : public rclcpp::Node
 {
 public:
   explicit G1AudioInterfaceNode(const rclcpp::NodeOptions& options);
-  G1AudioInterfaceNode(const rclcpp::NodeOptions& options, std::unique_ptr<AudioBackend> backend);
   ~G1AudioInterfaceNode() override;
 
 private:
@@ -69,7 +58,7 @@ private:
   bool StopAudio();
   bool CheckResult(int32_t result, const char* operation);
 
-  std::unique_ptr<AudioBackend> backend_;
+  std::unique_ptr<SdkAudioClient> client_;
   std::string app_name_;
   std::string stream_id_;
   int speaker_id_;

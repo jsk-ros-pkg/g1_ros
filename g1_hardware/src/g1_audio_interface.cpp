@@ -31,7 +31,7 @@
 #include <algorithm>
 #include <cmath>
 #include <stdexcept>
-#include <utility>
+#include <vector>
 
 #include <rclcpp_components/register_node_macro.hpp>
 #include <unitree/robot/channel/channel_factory.hpp>
@@ -44,6 +44,7 @@ namespace
 constexpr size_t kBytesPerSecond = 16000 * 2;
 constexpr size_t kChunkBytes = kBytesPerSecond / 10;
 constexpr size_t kMaxBufferBytes = kBytesPerSecond * 10;
+} // namespace
 
 class SdkAudioClient : public unitree::robot::g1::AudioClient
 {
@@ -59,45 +60,8 @@ public:
   }
 };
 
-class SdkAudioBackend : public AudioBackend
-{
-public:
-  explicit SdkAudioBackend(const std::string& network_interface)
-  {
-    unitree::robot::ChannelFactory::Instance()->Init(0, network_interface);
-    client_ = std::make_unique<SdkAudioClient>();
-    client_->SetTimeout(1.0F);
-    client_->Init();
-  }
-
-  int32_t Play(const std::string& app, const std::string& stream,
-               const std::vector<uint8_t>& pcm) override
-  {
-    return client_->PlayStream(app, stream, pcm);
-  }
-
-  int32_t Stop(const std::string& app) override { return client_->Stop(app); }
-
-  int32_t Say(const std::string& text, int32_t speaker) override
-  {
-    return client_->TtsMaker(text, speaker);
-  }
-
-  int32_t SetVolume(uint8_t volume) override { return client_->SetVolume(volume); }
-
-private:
-  std::unique_ptr<SdkAudioClient> client_;
-};
-} // namespace
-
 G1AudioInterfaceNode::G1AudioInterfaceNode(const rclcpp::NodeOptions& options)
-: G1AudioInterfaceNode(options, nullptr)
-{
-}
-
-G1AudioInterfaceNode::G1AudioInterfaceNode(const rclcpp::NodeOptions& options,
-                                           std::unique_ptr<AudioBackend> backend)
-: Node("g1_audio_interface", options), backend_(std::move(backend))
+: Node("g1_audio_interface", options)
 {
   rcl_interfaces::msg::ParameterDescriptor fixed;
   fixed.read_only = true;
@@ -117,12 +81,13 @@ G1AudioInterfaceNode::G1AudioInterfaceNode(const rclcpp::NodeOptions& options,
   if (app_name_.empty() || (speaker_id_ != 0 && speaker_id_ != 1)) {
     throw std::invalid_argument("app_name must be nonempty; speaker_id must be 0 or 1");
   }
-  if (!backend_) {
-    if (network_interface.empty()) {
-      throw std::invalid_argument("network_interface is required");
-    }
-    backend_ = std::make_unique<SdkAudioBackend>(network_interface);
+  if (network_interface.empty()) {
+    throw std::invalid_argument("network_interface is required");
   }
+  unitree::robot::ChannelFactory::Instance()->Init(0, network_interface);
+  client_ = std::make_unique<SdkAudioClient>();
+  client_->SetTimeout(1.0F);
+  client_->Init();
   // The default mutually exclusive group serializes all SDK calls and queue access.
   audio_sub_ = create_subscription<audio_common_msgs::msg::AudioData>(
       "audio", 10, [this](const audio_common_msgs::msg::AudioData& msg) { OnAudio(msg); });
@@ -158,7 +123,7 @@ bool G1AudioInterfaceNode::StopAudio()
   next_send_ = {};
   if (stream_started_) {
     stop_failed_ = true;
-    if (!CheckResult(backend_->Stop(app_name_), "PlayStop")) {
+    if (!CheckResult(client_->Stop(app_name_), "PlayStop")) {
       return false;
     }
     stream_started_ = false;
@@ -213,7 +178,7 @@ void G1AudioInterfaceNode::SendAudio()
   pending_.erase(pending_.begin(), pending_.begin() + count);
   try {
     stream_started_ = true;
-    if (!CheckResult(backend_->Play(app_name_, stream_id_, pcm), "PlayStream")) {
+    if (!CheckResult(client_->PlayStream(app_name_, stream_id_, pcm), "PlayStream")) {
       StopAudio();
       return;
     }
@@ -261,12 +226,12 @@ void G1AudioInterfaceNode::OnSound(const sound_play_msgs::msg::SoundRequest& msg
       speaker = msg.arg2 == "0" ? 0 : 1;
     }
     if (!StopAudio() ||
-        !CheckResult(backend_->SetVolume(static_cast<uint8_t>(std::lround(msg.volume * 100))),
+        !CheckResult(client_->SetVolume(static_cast<uint8_t>(std::lround(msg.volume * 100))),
                      "SetVolume"))
     {
       return;
     }
-    CheckResult(backend_->Say(msg.arg, speaker), "TtsMaker");
+    CheckResult(client_->TtsMaker(msg.arg, speaker), "TtsMaker");
   } catch (const std::exception& error) {
     RCLCPP_ERROR(get_logger(), "Sound request failed: %s", error.what());
   }
