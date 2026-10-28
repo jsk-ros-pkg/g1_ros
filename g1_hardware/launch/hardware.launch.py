@@ -270,7 +270,7 @@ def generate_launch_description():
             ),
             DeclareLaunchArgument(
                 "use_audio",
-                default_value="false",
+                default_value="true",
                 choices=["true", "false"],
                 description="Start the G1 PCM playback and TTS interface",
             ),

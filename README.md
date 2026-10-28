@@ -62,8 +62,8 @@ ros2 run g1_bringup inspire_dfx_hand_open_close_demo --ros-args -p hand:=both
 
 ## Audio playback and TTS
 
-Enable `use_audio:=true` on `g1_bringup.launch.py` or `hardware.launch.py`,
-or run only audio (no motion controllers):
+Audio starts by default with `g1_bringup.launch.py` and `hardware.launch.py`.
+Disable it with `use_audio:=false`, or run only audio (no motion controllers):
 
 ```shell
 ros2 run g1_hardware g1_audio_interface_node --ros-args -p network_interface:=eth0
