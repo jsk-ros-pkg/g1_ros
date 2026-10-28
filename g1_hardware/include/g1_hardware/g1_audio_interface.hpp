@@ -31,18 +31,22 @@
 
 #include <chrono>
 #include <cstdint>
-#include <deque>
+#include <map>
 #include <memory>
 #include <string>
+#include <vector>
 
 #include <audio_common_msgs/msg/audio_data.hpp>
 #include <audio_common_msgs/msg/audio_info.hpp>
 #include <rclcpp/rclcpp.hpp>
+#include <rclcpp_action/rclcpp_action.hpp>
+#include <sound_play_msgs/action/sound_request.hpp>
 #include <sound_play_msgs/msg/sound_request.hpp>
 
 namespace g1_hardware
 {
 class SdkAudioClient;
+struct AudioPlayback;
 
 class G1AudioInterfaceNode : public rclcpp::Node
 {
@@ -51,25 +55,45 @@ public:
   ~G1AudioInterfaceNode() override;
 
 private:
+  using Request = sound_play_msgs::msg::SoundRequest;
+  using Action = sound_play_msgs::action::SoundRequest;
+  using GoalHandle = rclcpp_action::ServerGoalHandle<Action>;
+  using Clock = std::chrono::steady_clock;
+
   void OnAudio(const audio_common_msgs::msg::AudioData& msg);
   void OnInfo(const audio_common_msgs::msg::AudioInfo& msg);
-  void OnSound(const sound_play_msgs::msg::SoundRequest& msg);
+  void OnSound(const Request& msg);
+  void ApplySound(const Request& msg);
+  void ValidateRequest(const Request& msg) const;
+  std::string SoundKey(const Request& msg) const;
   void SendAudio();
-  bool StopAudio();
-  bool CheckResult(int32_t result, const char* operation);
+  void StopStream();
+  void StopAll();
+  void FinishGoal(rclcpp_action::ResultCode code);
+  void AcceptGoal(const std::shared_ptr<GoalHandle>& goal);
 
   std::unique_ptr<SdkAudioClient> client_;
+  std::unique_ptr<AudioPlayback> audio_;
+  std::map<std::string, std::unique_ptr<AudioPlayback>> sounds_;
+  std::vector<uint8_t> audio_partial_;
   std::string app_name_;
   std::string stream_id_;
-  int speaker_id_;
+  std::string format_;
+  std::string sample_format_;
+  int sample_rate_;
+  int channels_;
+  size_t frame_bytes_;
   bool format_valid_{true};
   bool stream_started_{false};
   bool stop_failed_{false};
-  std::deque<uint8_t> pending_;
-  std::chrono::steady_clock::time_point next_send_{};
+  Clock::time_point next_send_{};
+  std::shared_ptr<GoalHandle> goal_;
+  std::string goal_key_;
+  Clock::time_point goal_start_{};
+  rclcpp_action::Server<Action>::SharedPtr action_server_;
   rclcpp::Subscription<audio_common_msgs::msg::AudioData>::SharedPtr audio_sub_;
   rclcpp::Subscription<audio_common_msgs::msg::AudioInfo>::SharedPtr info_sub_;
-  rclcpp::Subscription<sound_play_msgs::msg::SoundRequest>::SharedPtr sound_sub_;
+  rclcpp::Subscription<Request>::SharedPtr sound_sub_;
   rclcpp::TimerBase::SharedPtr timer_;
 };
 } // namespace g1_hardware

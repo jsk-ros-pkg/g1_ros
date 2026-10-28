@@ -13,6 +13,8 @@ ament_auto_find_build_dependencies(REQUIRED audio_common_msgs sound_play_msgs)
 # unitree_sdk2 uses a namespaced target, not auto-detectable via ament_auto
 find_package(unitree_sdk2 REQUIRED)
 find_package(cppzmq REQUIRED)
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(GSTREAMER REQUIRED IMPORTED_TARGET gstreamer-app-1.0 gstreamer-audio-1.0)
 
 ament_auto_add_library(${PROJECT_NAME} SHARED
   src/g1_hardware_interface.cpp
@@ -74,7 +76,7 @@ rclcpp_components_register_node(g1_livox_interface
 ament_auto_add_library(g1_audio_interface SHARED
   src/g1_audio_interface.cpp
 )
-target_link_libraries(g1_audio_interface unitree_sdk2)
+target_link_libraries(g1_audio_interface unitree_sdk2 PkgConfig::GSTREAMER)
 rclcpp_components_register_node(g1_audio_interface
   PLUGIN "g1_hardware::G1AudioInterfaceNode"
   EXECUTABLE g1_audio_interface_node
