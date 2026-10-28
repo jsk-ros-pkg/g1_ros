@@ -170,6 +170,7 @@ def _launch_setup(context, *args, **kwargs):
     hw_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(str(g1_hw_share / "launch/hardware.launch.py")),
         launch_arguments={
+            "use_audio": LaunchConfiguration("use_audio").perform(context),
             "hand_type": hand_type,
             "network_interface": network_interface,
             "kp": kp,
@@ -329,6 +330,12 @@ def generate_launch_description():
                 "use_rviz",
                 default_value="true",
                 description="Launch RViz with MoveIt plugin",
+            ),
+            DeclareLaunchArgument(
+                "use_audio",
+                default_value="true",
+                choices=["true", "false"],
+                description="Start the G1 PCM playback and TTS interface",
             ),
             DeclareLaunchArgument(
                 "use_gear_sonic",

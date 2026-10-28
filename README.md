@@ -60,6 +60,19 @@ To run hand motion demo
 ros2 run g1_bringup inspire_dfx_hand_open_close_demo --ros-args -p hand:=both
 ```
 
+## Audio playback and TTS
+
+```shell
+# Speak English using Unitree TTS (volume: 0.0–1.0).
+ros2 topic pub --once /robotsound sound_play_msgs/msg/SoundRequest "{sound: -3, command: 1, volume: 1.0, arg: 'Hello from G1'}"
+
+# Play a WAV/OGG/MP3 file on the driver host.
+ros2 topic pub --once /robotsound sound_play_msgs/msg/SoundRequest "{sound: -2, command: 1, volume: 1.0, arg: '/absolute/path/audio.wav'}"
+
+# Send a 16000 Hz mono 16-bit PCM WAV from another computer.
+ros2 run g1_hardware play_audio.py audio.wav
+```
+
 ## gear_sonic (SONIC) locomotion
 
 `g1_hardware` provides `gear_sonic_interface`, a bridge that sends locomotion, VR 3-point upper-body and SMPL-motion commands to the [GR00T-WholeBodyControl](https://github.com/NVlabs/GR00T-WholeBodyControl) (SONIC) deploy stack over ZMQ, and `gear_sonic_controller`, a `FollowJointTrajectory` action server that lets MoveIt execute trajectories through SONIC (FK → VR 3-point targets). Enable both with `use_gear_sonic:=true` on `hardware.launch.py` or `g1_bringup.launch.py`.
