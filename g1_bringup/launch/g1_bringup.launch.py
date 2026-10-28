@@ -335,7 +335,7 @@ def generate_launch_description():
                 "use_audio",
                 default_value="true",
                 choices=["true", "false"],
-                description="Start the G1 PCM playback and TTS interface",
+                description="Start G1 audio playback, microphone capture, TTS and ASR",
             ),
             DeclareLaunchArgument(
                 "use_gear_sonic",
