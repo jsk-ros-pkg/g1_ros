@@ -82,6 +82,15 @@ rclcpp_components_register_node(g1_audio_interface
   EXECUTABLE g1_audio_interface_node
 )
 
+ament_auto_add_library(g1_audio_capture SHARED
+  src/g1_audio_capture.cpp
+)
+target_link_libraries(g1_audio_capture unitree_sdk2)
+rclcpp_components_register_node(g1_audio_capture
+  PLUGIN "g1_hardware::G1AudioCaptureNode"
+  EXECUTABLE g1_audio_capture_node
+)
+
 install(FILES g1_hardware_plugin.xml
   DESTINATION share/${PROJECT_NAME})
 
