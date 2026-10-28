@@ -62,53 +62,53 @@ ros2 run g1_bringup inspire_dfx_hand_open_close_demo --ros-args -p hand:=both
 
 ## Audio playback and TTS
 
-Audio starts by default with `g1_bringup.launch.py` and `hardware.launch.py`.
-Disable it with `use_audio:=false`, or run only audio (no motion controllers):
+Audio starts by default with `g1_bringup.launch.py` and `hardware.launch.py`;
+use `use_audio:=false` to disable it. To run audio alone:
 
 ```shell
 ros2 run g1_hardware g1_audio_interface_node --ros-args -p network_interface:=eth0
-ros2 run g1_hardware play_audio.py /path/on/this/computer/speech.wav
-ros2 topic pub --once /robotsound sound_play_msgs/msg/SoundRequest "{sound: -3, command: 1, volume: 0.5, arg: 'Hello from G1', arg2: '1'}"
-# Stop this node's PCM playback and discard queued samples:
+ros2 topic pub --once /robotsound sound_play_msgs/msg/SoundRequest "{sound: -2, command: 1, volume: 0.5, arg: '/absolute/path/speech.wav'}"
+ros2 topic pub --once /robotsound sound_play_msgs/msg/SoundRequest "{sound: -3, command: 1, volume: 0.5, arg: 'Hello from G1'}"
 ros2 topic pub --once /robotsound sound_play_msgs/msg/SoundRequest "{sound: -1, command: 0}"
 ```
 
-Install only the interface packages:
-`sudo apt install ros-jazzy-audio-common-msgs ros-jazzy-sound-play-msgs`.
-The playback implementation uses Unitree SDK, not `audio_play` or `sound_play`.
+Install dependencies with `rosdep install --from-paths src/g1_ros --ignore-src -r -y`,
+or install the audio dependencies on Jazzy:
 
-| Input topic | Type | Supported data |
-| --- | --- | --- |
-| `audio` | `audio_common_msgs/msg/AudioData` | Headerless **16000 Hz, mono, signed 16-bit little-endian PCM** |
-| `audio_info` | `audio_common_msgs/msg/AudioInfo` | Optional: `channels: 1`, `sample_rate: 16000`, `sample_format: S16LE`, `coding_format: wave` |
-| `robotsound` | `sound_play_msgs/msg/SoundRequest` | `SAY (-3)` / `PLAY_ONCE (1)`; `ALL (-1)` / `PLAY_STOP (0)` stops PCM only |
+```shell
+sudo apt install ros-jazzy-audio-common-msgs ros-jazzy-sound-play \
+  libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
+  gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-ugly
+```
 
-Following [audio_common ROS 2](https://github.com/ros-drivers/audio_common/tree/ros2),
-`format: wave` means raw PCM on the topic, **not a RIFF/WAV file**.
-The file publisher validates WAV and strips its header. Convert other formats first:
-`ffmpeg -i input.mp3 -ar 16000 -ac 1 -c:a pcm_s16le speech.wav`.
-Direct publishers must send complete two-byte samples, preferably 3200 bytes at 10 Hz.
-The node paces transmission and rejects messages exceeding its 10-second pending buffer.
-There is no resampling/MP3 decoding. Incompatible metadata blocks PCM until valid
-metadata arrives; without metadata, the sender must ensure the format.
-Metadata uses reliable, transient-local QoS; commands/data use reliable, volatile
-QoS with depth 10. Use one audio producer at a time.
+The interfaces follow [audio_common ROS 2](https://github.com/ros-drivers/audio_common/tree/ros2):
 
-Read-only startup parameters are `format=wave`, `sample_format=S16LE`,
-`sample_rate=16000`, `channels=1`, `depth=16` (other formats are rejected),
-`app_name=g1_ros`, and `speaker_id=1`. Use distinct app names for separate nodes.
-TTS `arg` is text; `arg2` is `0` (Chinese), `1` (English), or empty (use `speaker_id`).
-For Japanese, synthesize externally and send PCM. `volume` is 0–1 and changes the
-robot's **global** volume, including subsequent PCM. TTS clears pending PCM.
-Avoid overlapping TTS and PCM: the SDK exposes neither TTS completion nor cancellation.
+| Interface | Behavior |
+| --- | --- |
+| `audio` (`audio_common_msgs/msg/AudioData`) | MP3 by default; `format:=wave` accepts headerless PCM. `sample_rate`, `channels`, `sample_format`, `depth` default to `16000`, `1`, `S16LE`, `16`. |
+| `audio_info` (`audio_common_msgs/msg/AudioInfo`) | Optional stream metadata updates the decoder format. Use one publisher at a time. |
+| `robotsound` (`sound_play_msgs/msg/SoundRequest`) | `PLAY_FILE (-2)`: `arg` is a filename/URI, `arg2` optionally names a ROS package. Built-in IDs `1`–`5` read assets from `sound_play/sounds`. |
+| `sound_play` (`sound_play_msgs/action/SoundRequest`) | File/built-in playback with elapsed-time feedback, completion, cancellation, and preemption. |
 
-This supports a subset of `sound_play`: `PLAY_FILE`, looping, and built-in sounds
-are rejected; no completion/cancellation action or custom service is provided.
-Use `play_audio.py` for files. SDK errors are logged; topic delivery does not
-acknowledge playback. A failed stop blocks PCM until another stop succeeds.
-EOF does not stop playback, allowing the robot's buffered audio to finish.
-See the [Unitree example](https://github.com/unitreerobotics/unitree_sdk2/blob/main/example/g1/audio/g1_audio_client_example.cpp)
-and [client API](https://github.com/unitreerobotics/unitree_sdk2/blob/main/include/unitree/robot/g1/audio/g1_audio_client.hpp).
+Files and built-in sounds support `PLAY_ONCE (1)`, `PLAY_START (2)` for looping,
+and `PLAY_STOP (0)` for individual stop; `ALL (-1)`/`PLAY_STOP` stops all PCM playback.
+Volume is applied per sound in `[0, 1]`; concurrent sounds are mixed. GStreamer
+converts input audio to **16000 Hz mono S16LE** before sending it to Unitree.
+Commands/data use reliable, volatile QoS, depth 10; metadata is transient-local.
+The input queue is bounded; publish streaming audio in real time.
+
+For a WAV file on another computer, run `ros2 run g1_hardware play_audio.py speech.wav`
+on that computer. This helper requires 16000 Hz mono 16-bit PCM WAV and publishes
+metadata plus headerless samples. `PLAY_FILE` instead resolves paths on the driver host.
+
+**TTS exception:** `SAY (-3)`/`PLAY_ONCE` uses Unitree's built-in English TTS.
+Leave `arg2` empty; `voice_kal_diphone` is also accepted for standard SoundClient
+compatibility and maps to Unitree's English voice. Festival is not run.
+Unitree exposes no TTS stop/completion API: TTS loop/stop requests and TTS action
+goals are rejected. `ALL` cannot stop speech. TTS volume changes the robot's global
+volume, so avoid overlapping TTS and PCM. File action completion is estimated from
+successfully sent samples and their duration, not a robot playback acknowledgment.
+Physical G1 playback and timing still require hardware validation.
 
 ## gear_sonic (SONIC) locomotion
 
