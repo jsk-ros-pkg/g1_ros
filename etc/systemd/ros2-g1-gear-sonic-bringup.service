@@ -1,6 +1,8 @@
 [Unit]
 Description=Unitree G1 ROS 2 Gear Sonic Bringup
-Requires=docker.service gear-sonic.service inspire-g1.service
+Requires=docker.service gear-sonic.service
+# Use Wants instead of Requires to prevent Inspire failures from stopping ROS 2 and consequently Gear-Sonic.
+Wants=inspire-g1.service
 After=docker.service gear-sonic.service inspire-g1.service
 
 [Service]
