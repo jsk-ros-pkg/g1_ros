@@ -7,3 +7,17 @@ repositories:
     type: git
     url: https://github.com/mqcmd196/unitree_sdk2.git
     version: add-package-xml
+  # g1_navigation odometry (FAST-LIO2) + its livox_ros_driver2 CustomMsg dep,
+  # built into the image (see --packages-select in ci.yml).
+  Ericsii/FAST_LIO:
+    type: git
+    url: https://github.com/Ericsii/FAST_LIO.git
+    version: ros2
+  tu-darmstadt-ros-pkg/livox_ros_driver2:
+    type: git
+    url: https://github.com/tu-darmstadt-ros-pkg/livox_ros_driver2.git
+    version: jazzy
+  tu-darmstadt-ros-pkg/Livox-SDK2:
+    type: git
+    url: https://github.com/tu-darmstadt-ros-pkg/Livox-SDK2.git
+    version: jazzy
