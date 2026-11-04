@@ -34,6 +34,8 @@
         enabled: false
       - name: ros2-g1-gear-sonic-bringup.service
         enabled: false
+      - name: ros-interaction.service
+        enabled: false
     # Kernel tuning the DDS middleware needs (large UDP socket buffers).
     g1_sysctl_files:
       - 99-ros2-dds.conf

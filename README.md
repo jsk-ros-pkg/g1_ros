@@ -73,6 +73,14 @@ ros2 topic pub --once /robotsound sound_play_msgs/msg/SoundRequest "{sound: -2, 
 ros2 run g1_hardware play_audio.py audio.wav
 ```
 
+## Microphone
+
+```shell
+ros2 launch g1_hardware interaction.launch.py
+# Pick the device explicitly (see `arecord -L`)
+ros2 launch g1_hardware interaction.launch.py device:=plughw:CARD=<card name>,DEV=0
+```
+
 ## gear_sonic (SONIC) locomotion
 
 `g1_hardware` provides `gear_sonic_interface`, a bridge that sends locomotion, VR 3-point upper-body and SMPL-motion commands to the [GR00T-WholeBodyControl](https://github.com/NVlabs/GR00T-WholeBodyControl) (SONIC) deploy stack over ZMQ, and `gear_sonic_controller`, a `FollowJointTrajectory` action server that lets MoveIt execute trajectories through SONIC (FK → VR 3-point targets). Enable both with `use_gear_sonic:=true` on `hardware.launch.py` or `g1_bringup.launch.py`.
@@ -139,6 +147,7 @@ The `etc/` directory mirrors the layout under `/etc` on the robot. `etc/systemd/
 | `inspire-g1.service` | Inspire RH56DFX hand service (`inspire_g1`) | disabled (pulled in by the bringup) |
 | `gear-sonic.service` | SONIC deploy stack (`gear_sonic_deploy/deploy.sh`) | disabled (pulled in by the bringup) |
 | `ros2-g1-gear-sonic-bringup.service` | `g1_bringup` in the `ghcr.io/jsk-ros-pkg/g1_ros:latest` container via `rocker` | manual |
+| `ros-interaction.service` | `g1_hardware/interaction.launch.py` (USB mic → `/microphone/audio`) in a separate container with ALSA access | disabled (pulled in by the bringup) |
 
 `etc/sysctl/` holds kernel tuning the DDS middleware needs:
 
@@ -164,18 +173,19 @@ ansible-playbook -i <robot-host>, -u unitree --become \
     etc/install.yml
 ```
 
-No unit autostarts at boot. `ros2-g1-gear-sonic-bringup.service` pulls in `gear-sonic.service` and `inspire-g1.service` via `Requires=`, so starting the bringup starts all three.
+No unit autostarts at boot. `ros2-g1-gear-sonic-bringup.service` pulls in `gear-sonic.service` and `inspire-g1.service` via `Requires=`, and `ros-interaction.service` via `Wants=`, so starting the bringup starts all four.
 
 ### Start / stop
 
 ```shell
-# Start SONIC + Inspire hand + the ROS bringup (pulled in via Requires=)
+# Start SONIC + Inspire hand + interaction (mic) + the ROS bringup
 sudo systemctl start ros2-g1-gear-sonic-bringup
 # Stop
 sudo systemctl stop ros2-g1-gear-sonic-bringup gear-sonic inspire-g1
 # Follow logs
 journalctl -u ros2-g1-gear-sonic-bringup -f
 journalctl -u gear-sonic -f
+journalctl -u ros-interaction -f
 ```
 
 > [!NOTE]
