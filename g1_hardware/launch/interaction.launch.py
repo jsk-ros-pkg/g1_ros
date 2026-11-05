@@ -46,7 +46,7 @@ device:=auto (default) picks the first USB sound card that has a capture PCM
 and opens it as plughw:CARD=<id>,DEV=<n>. The card *name* is used rather than
 its index, which can change between boots. plughw lets ALSA convert from the
 mic's native rate/channels. If no USB mic is found the launch fails, and
-ros-interaction.service retries until the mic is plugged in.
+ros-usb-microphone.service retries until the mic is plugged in.
 
 Usage:
   ros2 launch g1_hardware interaction.launch.py

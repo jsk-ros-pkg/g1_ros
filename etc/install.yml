@@ -38,7 +38,7 @@
         enabled: false
       - name: pico-hand-track-teleop.service
         enabled: false
-      - name: ros-interaction.service
+      - name: ros-usb-microphone.service
         enabled: false
     # Kernel tuning the DDS middleware needs (large UDP socket buffers).
     g1_sysctl_files:

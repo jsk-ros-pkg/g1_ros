@@ -1,5 +1,10 @@
 [Unit]
-Description=Unitree G1 ROS 2 Interaction (USB microphone -> /microphone/audio)
+# Temporary workaround: the Unitree SDK's built-in microphone stream on G1 PC2
+# returns only zeros (https://github.com/unitreerobotics/unitree_sdk2_python/issues/143).
+# Capture the USB microphone directly via ALSA in a separate container instead.
+# Once that issue is fixed and the built-in microphone receiver delivers real
+# audio, this USB capture service will no longer be needed.
+Description=Unitree G1 ROS 2 USB microphone (USB microphone -> /microphone/audio)
 Requires=docker.service
 After=docker.service
 # Stop together with the bringup that pulls this unit in via Wants=.
