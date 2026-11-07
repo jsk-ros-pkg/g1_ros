@@ -13,7 +13,7 @@ Environment="PATH=/home/unitree/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/s
 
 ExecStartPre=-/usr/bin/docker rm -f g1-bringup
 
-ExecStart=/home/unitree/.local/bin/rocker --mode non-interactive --name g1-bringup --env ROS_DOMAIN_ID=164 --env FASTDDS_BUILTIN_TRANSPORTS=LARGE_DATA --network host --ipc host --privileged ghcr.io/mqcmd196/g1_ros:latest "bash -lc 'source /root/target_ws/install/setup.bash && exec ros2 launch g1_bringup g1_bringup.launch.py hand_type:=inspire_dfq network_interface:=enP8p1s0 use_gear_sonic:=true use_rviz:=false use_d435i:=true'"
+ExecStart=/home/unitree/.local/bin/rocker --mode non-interactive --name g1-bringup --env ROS_DOMAIN_ID=164 --env FASTDDS_BUILTIN_TRANSPORTS=LARGE_DATA --network host --ipc host --privileged ghcr.io/jsk-ros-pkg/g1_ros:latest "bash -lc 'source /root/target_ws/install/setup.bash && exec ros2 launch g1_bringup g1_bringup.launch.py hand_type:=inspire_dfq network_interface:=enP8p1s0 use_gear_sonic:=true use_rviz:=false use_d435i:=true'"
 
 # SIGINT = graceful ros2 shutdown (runs ros2_control on_deactivate, closes the hand)
 ExecStop=-/usr/bin/docker stop -s SIGINT --time 30 g1-bringup

@@ -8,11 +8,13 @@ endif()
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON) # For clang-tidy
 
 find_package(ament_cmake_auto REQUIRED)
-ament_auto_find_build_dependencies()
+ament_auto_find_build_dependencies(REQUIRED audio_common_msgs sound_play_msgs)
 
 # unitree_sdk2 uses a namespaced target, not auto-detectable via ament_auto
 find_package(unitree_sdk2 REQUIRED)
 find_package(cppzmq REQUIRED)
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(GSTREAMER REQUIRED IMPORTED_TARGET gstreamer-app-1.0 gstreamer-audio-1.0)
 
 ament_auto_add_library(${PROJECT_NAME} SHARED
   src/g1_hardware_interface.cpp
@@ -71,11 +73,21 @@ rclcpp_components_register_node(g1_livox_interface
   EXECUTABLE g1_livox_interface_node
 )
 
+ament_auto_add_library(g1_audio_interface SHARED
+  src/g1_audio_interface.cpp
+)
+target_link_libraries(g1_audio_interface unitree_sdk2 PkgConfig::GSTREAMER)
+rclcpp_components_register_node(g1_audio_interface
+  PLUGIN "g1_hardware::G1AudioInterfaceNode"
+  EXECUTABLE g1_audio_interface_node
+)
+
 install(FILES g1_hardware_plugin.xml
   DESTINATION share/${PROJECT_NAME})
 
 install(
   PROGRAMS
+    scripts/play_audio.py
     scripts/example_sonic_pose.py
     scripts/replay_smpl_motion.py
     scripts/example_smpl_jump

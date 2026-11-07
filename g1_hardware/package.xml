@@ -7,6 +7,14 @@
   <maintainer email="mqcmd196@hotmail.co.jp">Yoshiki Obinata</maintainer>
   <license>BSD-3-Clause</license>
   <buildtool_depend>ament_cmake_auto</buildtool_depend>
+  <build_depend>pkg-config</build_depend>
+  <depend>ament_index_cpp</depend>
+  <depend>libgstreamer1.0-dev</depend>
+  <depend>libgstreamer-plugins-base1.0-dev</depend>
+  <exec_depend>gstreamer1.0-plugins-base</exec_depend>
+  <exec_depend>gstreamer1.0-plugins-good</exec_depend>
+  <exec_depend>gstreamer1.0-plugins-ugly</exec_depend>
+  <depend>audio_common_msgs</depend>
   <depend>control_msgs</depend>
   <depend>gear_sonic_interfaces</depend>
   <depend>geometry_msgs</depend>
@@ -19,11 +27,14 @@
   <depend>rclcpp_components</depend>
   <depend>rclcpp_lifecycle</depend>
   <depend>sensor_msgs</depend>
+  <depend>sound_play_msgs</depend>
   <depend>std_msgs</depend>
   <depend>std_srvs</depend>
   <depend>tf2_ros</depend>
   <depend>trajectory_msgs</depend>
   <depend>unitree_sdk2</depend>
+  <exec_depend>sound_play</exec_depend>
+  <exec_depend>rclpy</exec_depend>
   <exec_depend>g1_description</exec_depend>
   <exec_depend>controller_manager</exec_depend>
   <exec_depend>joint_state_broadcaster</exec_depend>

@@ -10,7 +10,7 @@ Then build the packages.
 source /opt/ros/<ROS DISTRO>/setup.bash
 mkdir -p <colcon workspace>/src
 cd <colcon workspace>/src
-wget https://raw.githubusercontent.com/mqcmd196/g1_ros/refs/heads/master/jazzy.repos.yaml -O- | vcs import
+wget https://raw.githubusercontent.com/jsk-ros-pkg/g1_ros/refs/heads/master/jazzy.repos.yaml -O- | vcs import
 sudo apt update && rosdep update && rosdep install -iqry --from-paths .
 cd ..
 colcon build --symlink-install --packages-up-to g1_bringup
@@ -58,6 +58,19 @@ To run hand motion demo
 
 ```shell
 ros2 run g1_bringup inspire_dfx_hand_open_close_demo --ros-args -p hand:=both
+```
+
+## Audio playback and TTS
+
+```shell
+# Speak English using Unitree TTS (volume: 0.0–1.0).
+ros2 topic pub --once /robotsound sound_play_msgs/msg/SoundRequest "{sound: -3, command: 1, volume: 1.0, arg: 'Hello from G1'}"
+
+# Play a WAV/OGG/MP3 file on the driver host.
+ros2 topic pub --once /robotsound sound_play_msgs/msg/SoundRequest "{sound: -2, command: 1, volume: 1.0, arg: '/absolute/path/audio.wav'}"
+
+# Send a 16000 Hz mono 16-bit PCM WAV from another computer.
+ros2 run g1_hardware play_audio.py audio.wav
 ```
 
 ## gear_sonic (SONIC) locomotion
@@ -125,7 +138,7 @@ The `etc/` directory mirrors the layout under `/etc` on the robot. `etc/systemd/
 |---|---|---|
 | `inspire-g1.service` | Inspire RH56DFX hand service (`inspire_g1`) | disabled (pulled in by the bringup) |
 | `gear-sonic.service` | SONIC deploy stack (`gear_sonic_deploy/deploy.sh`) | disabled (pulled in by the bringup) |
-| `ros2-g1-gear-sonic-bringup.service` | `g1_bringup` in the `ghcr.io/mqcmd196/g1_ros` container via `rocker` | manual |
+| `ros2-g1-gear-sonic-bringup.service` | `g1_bringup` in the `ghcr.io/jsk-ros-pkg/g1_ros:latest` container via `rocker` | manual |
 
 `etc/sysctl/` holds kernel tuning the DDS middleware needs:
 
@@ -166,7 +179,9 @@ journalctl -u gear-sonic -f
 ```
 
 > [!NOTE]
-> `ros2-g1-gear-sonic-bringup.service` runs the `ghcr.io/mqcmd196/g1_ros` container image (built from `master`), not your local workspace. Rebuild/pull the image to pick up changes that are merged to `master`.
+> `ros2-g1-gear-sonic-bringup.service` runs the `ghcr.io/jsk-ros-pkg/g1_ros:latest` container image (built from `master`) by default, not your local workspace. After CI publishes an updated image from `master`, run `docker pull ghcr.io/jsk-ros-pkg/g1_ros:latest` before starting the service to pick up those changes.
+>
+> You can also try PR changes before merging: CI publishes images for PRs from this repository (not forks), tagged with the sanitized source branch name and the first seven characters of the PR head commit SHA. After CI publishes the image, run `docker pull ghcr.io/jsk-ros-pkg/g1_ros:<sha7>`, replace `:latest` with `:<sha7>` in the installed service's `ExecStart`, and run `sudo systemctl daemon-reload` before starting the service. Replace `<sha7>` with the PR head commit's seven-character SHA.
 
 ## Contribution
 
