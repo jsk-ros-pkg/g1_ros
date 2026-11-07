@@ -27,7 +27,7 @@
 # POSSIBILITY OF SUCH DAMAGE.
 
 """
-Human-robot interaction I/O that runs beside the G1 bringup.
+USB microphone capture that runs beside the G1 bringup.
 
 Currently: stream the G1 internal USB microphone with audio_capture
 (disable with use_mic:=false).
@@ -49,8 +49,8 @@ mic's native rate/channels. If no USB mic is found the launch fails, and
 ros-usb-microphone.service retries until the mic is plugged in.
 
 Usage:
-  ros2 launch g1_hardware interaction.launch.py
-  ros2 launch g1_hardware interaction.launch.py device:=plughw:CARD=Device,DEV=0
+  ros2 launch g1_hardware usb_microphone.launch.py
+  ros2 launch g1_hardware usb_microphone.launch.py device:=plughw:CARD=Device,DEV=0
 """
 
 import os

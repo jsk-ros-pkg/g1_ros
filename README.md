@@ -78,9 +78,9 @@ ros2 run g1_hardware play_audio.py audio.wav
 USB microphone capture is a temporary workaround for [unitreerobotics/unitree_sdk2_python#143](https://github.com/unitreerobotics/unitree_sdk2_python/issues/143), where the Unitree SDK's built-in microphone stream on G1 PC2 returns only zeros. The launch file below captures the USB microphone directly via ALSA; `ros-usb-microphone.service` runs it in a separate container with ALSA access. Once that issue is fixed and the built-in microphone receiver delivers real audio, this USB capture and service will no longer be needed.
 
 ```shell
-ros2 launch g1_hardware interaction.launch.py
+ros2 launch g1_hardware usb_microphone.launch.py
 # Pick the device explicitly (see `arecord -L`)
-ros2 launch g1_hardware interaction.launch.py device:=plughw:CARD=<card name>,DEV=0
+ros2 launch g1_hardware usb_microphone.launch.py device:=plughw:CARD=<card name>,DEV=0
 ```
 
 ## gear_sonic (SONIC) locomotion
@@ -151,7 +151,7 @@ The `etc/` directory mirrors the layout under `/etc` on the robot. `etc/systemd/
 | `pico-manager.service` | Official PICO manager with optical-hand export | manual / pulled in by PICO teleop |
 | `pico-hand-track-teleop.service` | Starts the manager, ROS bringup and hand adapter via rocker | manual |
 | `ros2-g1-gear-sonic-bringup.service` | `g1_bringup` in the `ghcr.io/jsk-ros-pkg/g1_ros:latest` container via `rocker` | manual |
-| `ros-usb-microphone.service` | `g1_hardware/interaction.launch.py` (USB mic → `/microphone/audio`) in a separate container with ALSA access | disabled (pulled in by the bringup) |
+| `ros-usb-microphone.service` | `g1_hardware/usb_microphone.launch.py` (USB mic → `/microphone/audio`) in a separate container with ALSA access | disabled (pulled in by the bringup) |
 
 `etc/sysctl/` holds kernel tuning the DDS middleware needs:
 
