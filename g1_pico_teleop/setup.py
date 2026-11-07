@@ -25,12 +25,13 @@ setup(
     zip_safe=True,
     maintainer="G1 Pico Teleop maintainers",
     maintainer_email="maintainer@example.com",
-    description="PICO optical-hand adapter for the G1 ROS 2 stack",
+    description="PICO body and optical-hand adapters for the G1 ROS 2 stack",
     license="BSD-3-Clause",
     tests_require=["pytest"],
     entry_points={
         "console_scripts": [
             "pico_hand_adapter = g1_pico_teleop.hand.hand_ros_adapter_node:main",
+            "pico_body_adapter = g1_pico_teleop.body.body_ros_adapter_node:main",
         ],
     },
 )

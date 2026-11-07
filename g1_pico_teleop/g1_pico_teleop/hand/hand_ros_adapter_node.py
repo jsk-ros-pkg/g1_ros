@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import math
 from pathlib import Path
+import signal
 import socket
 import time
 from typing import Any
@@ -19,6 +20,7 @@ from builtin_interfaces.msg import Duration
 import numpy as np
 import rclpy
 from rclpy.node import Node
+from rclpy.executors import ExternalShutdownException
 from sensor_msgs.msg import JointState
 from std_srvs.srv import SetBool
 from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
@@ -454,13 +456,17 @@ def main(args=None) -> None:
     try:
         node = PicoHandAdapter()
         rclpy.spin(node)
-    except KeyboardInterrupt:
+    except (KeyboardInterrupt, ExternalShutdownException):
         pass
     finally:
+        # The terminal and ros2 launch can both deliver SIGINT. Let the first
+        # one stop spin; ignore repeats while releasing the ROS/ZMQ resources.
+        old_int = signal.signal(signal.SIGINT, signal.SIG_IGN)
         if node is not None:
             node.destroy_node()
         if rclpy.ok():
             rclpy.shutdown()
+        signal.signal(signal.SIGINT, old_int)
 
 
 if __name__ == "__main__":

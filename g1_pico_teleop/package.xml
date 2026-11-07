@@ -3,7 +3,7 @@
 <package format="3">
   <name>g1_pico_teleop</name>
   <version>0.1.0</version>
-  <description>PICO optical-hand adapter for the G1 ROS 2 stack</description>
+  <description>PICO body and optical-hand adapters for the G1 ROS 2 stack</description>
   <maintainer email="maintainer@example.com">G1 Pico Teleop maintainers</maintainer>
   <license>BSD-3-Clause</license>
 
@@ -11,6 +11,8 @@
 
   <exec_depend>ament_index_python</exec_depend>
   <exec_depend>builtin_interfaces</exec_depend>
+  <exec_depend>gear_sonic_interfaces</exec_depend>
+  <exec_depend>geometry_msgs</exec_depend>
   <exec_depend>launch</exec_depend>
   <exec_depend>launch_ros</exec_depend>
   <exec_depend>python3-numpy</exec_depend>
@@ -18,6 +20,7 @@
   <exec_depend>rclpy</exec_depend>
   <exec_depend>ros2launch</exec_depend>
   <exec_depend>sensor_msgs</exec_depend>
+  <exec_depend>std_msgs</exec_depend>
   <exec_depend>std_srvs</exec_depend>
   <exec_depend>trajectory_msgs</exec_depend>
 
