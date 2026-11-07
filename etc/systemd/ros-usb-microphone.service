@@ -15,7 +15,7 @@ Type=simple
 User=unitree
 WorkingDirectory=/home/unitree
 
-ExecStartPre=-/usr/bin/docker rm -f g1-interaction
+ExecStartPre=-/usr/bin/docker rm -f g1-usb-microphone
 
 # The mic is not always plugged in, so /dev/snd is bind-mounted (instead of
 # --device /dev/snd, which only exposes the device nodes present at container
@@ -23,9 +23,9 @@ ExecStartPre=-/usr/bin/docker rm -f g1-interaction
 # rule: a mic plugged in later becomes visible to a restarted container.
 # The launch file picks the USB mic by card name (device:=auto) and exits if
 # none is present; Restart= below retries until the mic appears.
-ExecStart=/usr/bin/docker run --rm --init --name g1-interaction --env ROS_DOMAIN_ID=164 --env FASTDDS_BUILTIN_TRANSPORTS=LARGE_DATA --network host --ipc host --volume /dev/snd:/dev/snd "--device-cgroup-rule=c 116:* rmw" ghcr.io/jsk-ros-pkg/g1_ros:latest bash -lc 'source /root/target_ws/install/setup.bash && exec ros2 launch g1_hardware interaction.launch.py'
+ExecStart=/usr/bin/docker run --rm --init --name g1-usb-microphone --env ROS_DOMAIN_ID=164 --env FASTDDS_BUILTIN_TRANSPORTS=LARGE_DATA --network host --ipc host --volume /dev/snd:/dev/snd "--device-cgroup-rule=c 116:* rmw" ghcr.io/jsk-ros-pkg/g1_ros:latest bash -lc 'source /root/target_ws/install/setup.bash && exec ros2 launch g1_hardware usb_microphone.launch.py'
 
-ExecStop=-/usr/bin/docker stop -s SIGINT --time 10 g1-interaction
+ExecStop=-/usr/bin/docker stop -s SIGINT --time 10 g1-usb-microphone
 
 Restart=always
 RestartSec=10
