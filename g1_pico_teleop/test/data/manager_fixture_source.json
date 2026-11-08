@@ -1,0 +1,5 @@
+{
+  "source": "gear_sonic/utils/teleop/zmq/zmq_planner_sender.py",
+  "source_sha256": "9455224194b83ceb372e10a99a15a3d9624cef38e2945d394873ac4d03d52f99",
+  "description": "Synthetic poses packed by the existing reference sender; no robot or SDK was run."
+}
