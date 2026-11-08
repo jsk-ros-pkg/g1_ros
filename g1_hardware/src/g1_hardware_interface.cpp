@@ -232,23 +232,6 @@ hardware_interface::return_type
 G1HardwareInterface::perform_command_mode_switch(const std::vector<std::string>& start_interfaces,
                                                  const std::vector<std::string>& stop_interfaces)
 {
-  // Check loco mode only when starting interfaces (not stopping-only switches)
-  if (!start_interfaces.empty()) {
-    int fsm_id_;
-    loco_client_->GetFsmId(fsm_id_);
-    if (fsm_id_ != 500    // Walk mode in the tablet
-        && fsm_id_ != 501 // Walk (Control waist) mode in the tablet
-    )
-    {
-      RCLCPP_FATAL(
-          rclcpp::get_logger("G1HardwareInterface"),
-          "Robot is in FSM mode %d, but 500 (start) or 501 (control_waist) mode is "
-          "required. Please switch the robot to stand_up mode before activating the controller.",
-          fsm_id_);
-      return hardware_interface::return_type::ERROR;
-    }
-  }
-
   auto is_own_command_interface = [this](const std::string& interface_name) {
     const auto separator = interface_name.find('/');
     const std::string joint_name =
@@ -262,6 +245,23 @@ G1HardwareInterface::perform_command_mode_switch(const std::vector<std::string>&
       std::count_if(start_interfaces.begin(), start_interfaces.end(), is_own_command_interface));
   const auto stopped = static_cast<int>(
       std::count_if(stop_interfaces.begin(), stop_interfaces.end(), is_own_command_interface));
+
+  // Check body mode only when starting this hardware's command interfaces.
+  if (started > 0) {
+    int fsm_id_ = -1;
+    loco_client_->GetFsmId(fsm_id_);
+    if (fsm_id_ != 500    // Walk mode in the tablet
+        && fsm_id_ != 501 // Walk (Control waist) mode in the tablet
+    )
+    {
+      RCLCPP_FATAL(
+          rclcpp::get_logger("G1HardwareInterface"),
+          "Robot is in FSM mode %d, but 500 (start) or 501 (control_waist) mode is "
+          "required. Please switch the robot to stand_up mode before activating the controller.",
+          fsm_id_);
+      return hardware_interface::return_type::ERROR;
+    }
+  }
 
   active_command_interfaces_ += started;
   active_command_interfaces_ -= stopped;
