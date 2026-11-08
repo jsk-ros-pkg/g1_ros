@@ -1,0 +1,21 @@
+[Unit]
+Description=PICO optical hand teleoperation through ROS 2
+Requires=pico-manager.service ros2-g1-gear-sonic-bringup.service
+After=docker.service pico-manager.service ros2-g1-gear-sonic-bringup.service
+
+[Service]
+Type=simple
+User=unitree
+WorkingDirectory=/home/unitree
+
+Environment="HOME=/home/unitree"
+Environment="PATH=/home/unitree/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+
+ExecStart=/home/unitree/.local/bin/rocker --mode non-interactive --name pico-hand-track-teleop --env ROS_DOMAIN_ID=164 --env FASTDDS_BUILTIN_TRANSPORTS=LARGE_DATA --network host --ipc host ghcr.io/jsk-ros-pkg/g1_ros:latest "bash -lc 'source /root/target_ws/install/setup.bash && exec ros2 launch g1_pico_teleop pico_hands.launch.py hand_zmq_endpoint:=tcp://127.0.0.1:5560'"
+ExecStop=-/usr/bin/docker stop -s SIGINT --time 30 pico-hand-track-teleop
+
+Restart=no
+TimeoutStopSec=45
+
+StandardOutput=journal
+StandardError=journal
