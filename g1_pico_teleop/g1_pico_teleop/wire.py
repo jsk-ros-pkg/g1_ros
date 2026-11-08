@@ -79,7 +79,7 @@ def _finite_array(value: Any, shape: tuple[int, int], *, field_name: str) -> np.
 
 @dataclass(frozen=True)
 class PicoUdpFrame:
-    """One synchronized body frame with independently optional optical hands."""
+    """Optical hands with a reserved body slot for v1 wire compatibility."""
 
     sequence: int
     device_timestamp_ns: int
@@ -113,39 +113,6 @@ class PicoUdpFrame:
                 "right_hand",
                 _finite_array(self.right_hand, HAND_SHAPE, field_name="right_hand"),
             )
-
-
-def _float_bytes(value: np.ndarray) -> bytes:
-    return value.astype(_FLOAT_DTYPE, copy=False).tobytes(order="C")
-
-
-def encode_frame(frame: PicoUdpFrame) -> bytes:
-    """Serialize exactly one :class:`PicoUdpFrame` into a v1 datagram."""
-
-    if not isinstance(frame, PicoUdpFrame):
-        raise WireError("frame must be a PicoUdpFrame")
-    flags = 0
-    if frame.left_hand is not None:
-        flags |= FLAG_LEFT_HAND
-    if frame.right_hand is not None:
-        flags |= FLAG_RIGHT_HAND
-    header = _HEADER.pack(
-        MAGIC,
-        VERSION,
-        flags,
-        0,
-        frame.sequence,
-        frame.device_timestamp_ns,
-        frame.source_timestamp_ns,
-    )
-    left = bytes(_HAND_BYTES) if frame.left_hand is None else _float_bytes(frame.left_hand)
-    right = bytes(_HAND_BYTES) if frame.right_hand is None else _float_bytes(frame.right_hand)
-    content = header + _float_bytes(frame.body) + left + right
-    checksum = zlib.crc32(content) & 0xFFFFFFFF
-    datagram = content + _CRC.pack(checksum)
-    if len(datagram) != DATAGRAM_SIZE:  # Defensive invariant for protocol edits.
-        raise AssertionError("v1 datagram layout is not fixed length")
-    return datagram
 
 
 def _decode_array(data: bytes, offset: int, shape: tuple[int, int]) -> tuple[np.ndarray, int]:

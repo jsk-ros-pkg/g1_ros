@@ -197,24 +197,6 @@ class OpticalCalibration:
         object.__setattr__(self, "open_q", open_q)
         object.__setattr__(self, "closed_q", closed_q)
 
-    @classmethod
-    def capture(
-        cls,
-        *,
-        side: str,
-        open_hand: Any,
-        closed_hand: Any,
-        open_q: Any = NATIVE6_LOWER,
-        closed_q: Any = NATIVE6_UPPER,
-    ) -> "OpticalCalibration":
-        return cls(
-            side=side,
-            open_features=extract_native6_features(open_hand),
-            closed_features=extract_native6_features(closed_hand),
-            open_q=open_q,
-            closed_q=closed_q,
-        )
-
     def retarget(self, hand: Any) -> np.ndarray:
         features = extract_native6_features(hand)
         fraction = np.clip(

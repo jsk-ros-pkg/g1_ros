@@ -17,21 +17,19 @@ setup(
         ),
         (f"share/{package_name}", ["package.xml", "README.md"]),
         (f"share/{package_name}/launch", glob("launch/*.launch.py")),
-        (f"lib/{package_name}", glob("scripts/pico_xrt_source.py")),
         (f"share/{package_name}/config", glob("config/*")),
         (f"share/{package_name}/patches", glob("patches/*.patch")),
     ],
     install_requires=["setuptools"],
+    tests_require=["pytest"],
     zip_safe=True,
     maintainer="G1 Pico Teleop maintainers",
     maintainer_email="maintainer@example.com",
-    description="PICO body and optical-hand adapters for the G1 ROS 2 stack",
+    description="PICO optical-hand teleoperation for the G1 ROS 2 stack",
     license="BSD-3-Clause",
-    tests_require=["pytest"],
     entry_points={
         "console_scripts": [
             "pico_hand_adapter = g1_pico_teleop.hand.hand_ros_adapter_node:main",
-            "pico_body_adapter = g1_pico_teleop.body.body_ros_adapter_node:main",
         ],
     },
 )

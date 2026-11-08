@@ -54,7 +54,7 @@ def slew_limit_native6(
     *,
     elapsed_s: float,
     velocity_margin: float = 0.8,
-) -> tuple[np.ndarray, bool]:
+) -> np.ndarray:
     """Limit one canonical command step using verified per-joint velocities."""
 
     if not np.isfinite(elapsed_s) or elapsed_s <= 0.0:
@@ -66,9 +66,7 @@ def slew_limit_native6(
     maximum_delta = NATIVE6_VELOCITY_LIMIT_RAD_S * np.float32(elapsed_s * velocity_margin)
     delta = target_value - previous_value
     limited_delta = np.clip(delta, -maximum_delta, maximum_delta)
-    return (previous_value + limited_delta).astype(np.float32), not np.array_equal(
-        delta, limited_delta
-    )
+    return (previous_value + limited_delta).astype(np.float32)
 
 
 @dataclass(frozen=True)
@@ -79,7 +77,6 @@ class JtcHandCommand:
     joint_names: tuple[str, ...]
     positions: np.ndarray
     native6_positions: np.ndarray
-    limited: bool
 
     def __post_init__(self) -> None:
         expected_names = joint_names(self.side)
@@ -106,7 +103,7 @@ def make_jtc_command(
 ) -> JtcHandCommand:
     """Slew-limit native6 and reorder it for the existing TA JTC."""
 
-    limited_native, limited = slew_limit_native6(
+    limited_native = slew_limit_native6(
         target,
         previous,
         elapsed_s=elapsed_s,
@@ -117,5 +114,4 @@ def make_jtc_command(
         joint_names=joint_names(side),
         positions=limited_native[_JTC_FROM_NATIVE6],
         native6_positions=limited_native,
-        limited=limited,
     )
