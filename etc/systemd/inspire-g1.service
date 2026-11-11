@@ -6,9 +6,10 @@ Type=simple
 User=root
 WorkingDirectory=/home/unitree/dfx_inspire_service/build
 ExecStart=/home/unitree/dfx_inspire_service/build/inspire_g1 -k -u
+ExecStopPost=/usr/bin/sleep 5
 
 Restart=on-failure
-RestartSec=5
+RestartSec=0
 
 StandardOutput=journal
 StandardError=journal
