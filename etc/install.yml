@@ -34,6 +34,10 @@
         enabled: false
       - name: ros2-g1-gear-sonic-bringup.service
         enabled: false
+      - name: pico-manager.service
+        enabled: false
+      - name: pico-hand-track-teleop.service
+        enabled: false
       - name: ros-usb-microphone.service
         enabled: false
     # Kernel tuning the DDS middleware needs (large UDP socket buffers).
@@ -47,7 +51,6 @@
         state: link
         force: true
       loop: "{{ g1_services }}"
-      notify: Reload systemd
 
     - name: Symlink sysctl drop-ins into {{ sysctl_dir }}
       ansible.builtin.file:
@@ -58,8 +61,13 @@
       loop: "{{ g1_sysctl_files }}"
       notify: Apply sysctl settings
 
-    - name: Reload systemd and apply sysctl before enabling
+    - name: Apply sysctl settings before enabling
       ansible.builtin.meta: flush_handlers
+
+    # Unit contents can change without changing their installed symlinks.
+    - name: Reload systemd unit definitions
+      ansible.builtin.systemd:
+        daemon_reload: true
 
     - name: Apply each unit's boot-autostart state
       ansible.builtin.systemd:
@@ -70,10 +78,6 @@
         label: "{{ item.name }}"
 
   handlers:
-    - name: Reload systemd
-      ansible.builtin.systemd:
-        daemon_reload: true
-
     - name: Apply sysctl settings
       ansible.builtin.command: sysctl --system
       changed_when: true
