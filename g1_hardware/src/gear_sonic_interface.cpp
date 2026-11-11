@@ -29,6 +29,7 @@
 #include "g1_hardware/gear_sonic_interface.hpp"
 
 #include <algorithm>
+#include <cerrno>
 #include <chrono>
 #include <cmath>
 #include <cstring>
@@ -87,11 +88,23 @@ GearSonicInterface::GearSonicInterface(const rclcpp::NodeOptions& options)
   // (0x00 + filter).  We poll these in TimerCallback to track deploy_connected_.
   zmq_sock_ = std::make_unique<zmq::socket_t>(zmq_ctx_, zmq::socket_type::xpub);
   const std::string addr = "tcp://" + zmq_host + ":" + std::to_string(zmq_port);
-  RCLCPP_INFO(get_logger(),
-              "Bound ZMQ XPUB to %s. "
-              "Execute gear_sonic's ./deploy.sh and ensure the ZMQ connection is available.",
-              addr.c_str());
-  zmq_sock_->bind(addr);
+  try {
+    zmq_sock_->bind(addr);
+    RCLCPP_INFO(get_logger(),
+                "Bound ZMQ XPUB to %s. "
+                "Execute gear_sonic's ./deploy.sh and ensure the ZMQ connection is available.",
+                addr.c_str());
+  } catch (const zmq::error_t& error) {
+    if (error.num() != EADDRINUSE) {
+      throw;
+    }
+    zmq_sock_.reset();
+    RCLCPP_WARN(get_logger(),
+                "ZMQ endpoint %s is already in use. ROS body control is disabled; "
+                "state monitoring and hand control remain available. "
+                "Restart this node after releasing the endpoint to use ROS body control.",
+                addr.c_str());
+  }
 
   // ── Services ────────────────────────────────────────────────────────────
 
@@ -235,6 +248,11 @@ GearSonicInterface::~GearSonicInterface()
 void GearSonicInterface::OnEnableControl(std_srvs::srv::SetBool::Request::SharedPtr req,
                                          std_srvs::srv::SetBool::Response::SharedPtr res)
 {
+  if (!zmq_sock_ && req->data) {
+    res->success = false;
+    res->message = "ROS body control unavailable: ZMQ endpoint was already in use at startup";
+    return;
+  }
   if (req->data) {
     if (!deploy_connected_) {
       RCLCPP_ERROR(get_logger(),
@@ -364,6 +382,10 @@ void GearSonicInterface::OnHead(geometry_msgs::msg::PoseStamped::ConstSharedPtr 
 
 void GearSonicInterface::TimerCallback()
 {
+  if (!zmq_sock_) {
+    return;
+  }
+
   // Poll XPUB subscription frames (non-blocking).
   // 0x01 prefix = subscriber connected; 0x00 prefix = subscriber disconnected.
   // Safe to call from the same thread as send().
@@ -643,6 +665,12 @@ std::vector<uint8_t> GearSonicInterface::BuildPlannerMessage(
 void GearSonicInterface::OnEnableSmplStream(std_srvs::srv::SetBool::Request::SharedPtr req,
                                             std_srvs::srv::SetBool::Response::SharedPtr res)
 {
+  // Disabling SMPL also sends planner commands, so reject both requests.
+  if (!zmq_sock_) {
+    res->success = false;
+    res->message = "ROS body control unavailable: ZMQ endpoint was already in use at startup";
+    return;
+  }
   if (req->data) {
     if (!deploy_connected_) {
       RCLCPP_ERROR(get_logger(),

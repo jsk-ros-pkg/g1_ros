@@ -1,0 +1,24 @@
+[Unit]
+Description=PICO manager with optical hand export
+Requires=gear-sonic.service
+After=network.target gear-sonic.service
+Before=ros2-g1-gear-sonic-bringup.service
+
+[Service]
+Type=simple
+User=unitree
+WorkingDirectory=/home/unitree/GR00T-WholeBodyControl
+
+ExecStart=/home/unitree/GR00T-WholeBodyControl/.venv_teleop/bin/python -u gear_sonic/scripts/pico_manager_thread_server.py --manager --port 5556 --optical-hand-port 5560
+
+# Type=simple does not wait for ports to bind. ROS also binds 5556, so wait
+# for this manager to own both ports before ROS starts and claims 5556.
+ExecStartPost=/bin/bash -c 'until ss -H -ltnp "sport = :5556" | grep -Fq "pid=$$MAINPID," && ss -H -ltnp "sport = :5560" | grep -Fq "pid=$$MAINPID,"; do kill -0 "$$MAINPID" || exit 1; sleep 1; done'
+
+TimeoutStartSec=900
+TimeoutStopSec=30
+KillSignal=SIGINT
+Restart=no
+
+StandardOutput=journal
+StandardError=journal

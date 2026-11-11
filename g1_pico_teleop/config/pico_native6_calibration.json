@@ -1,0 +1,105 @@
+{
+  "calibration_id": "pico-20260830-023248-thumb2d-full-yaw-v3",
+  "created_realtime_ns": 1788024862095686189,
+  "joint_order": [
+    "pinky",
+    "ring",
+    "middle",
+    "index",
+    "thumb_bend",
+    "thumb_rotation"
+  ],
+  "left": {
+    "calibration_id": "pico-20260830-023248-thumb2d-full-yaw-v3",
+    "closed_features": [
+      3.835348129272461,
+      3.873861312866211,
+      3.9045002460479736,
+      3.7948074340820312,
+      0.6459105014801025,
+      -0.277483195066452
+    ],
+    "closed_q": [
+      1.7000000476837158,
+      1.7000000476837158,
+      1.7000000476837158,
+      1.7000000476837158,
+      0.6000000238418579,
+      1.2999999523162842
+    ],
+    "joint_order": [
+      "pinky",
+      "ring",
+      "middle",
+      "index",
+      "thumb_bend",
+      "thumb_rotation"
+    ],
+    "open_features": [
+      0.6770882606506348,
+      0.40363794565200806,
+      0.3089641332626343,
+      0.15167775750160217,
+      0.16734039783477783,
+      0.9180301427841187
+    ],
+    "open_q": [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    "schema": "inspire.optical.calibration.v1",
+    "side": "left"
+  },
+  "right": {
+    "calibration_id": "pico-20260830-023248-thumb2d-full-yaw-v3",
+    "closed_features": [
+      3.7385897636413574,
+      3.851961612701416,
+      3.904445171356201,
+      3.9358432292938232,
+      0.51811283826828,
+      -0.4623277485370636
+    ],
+    "closed_q": [
+      1.7000000476837158,
+      1.7000000476837158,
+      1.7000000476837158,
+      1.7000000476837158,
+      0.6000000238418579,
+      1.2999999523162842
+    ],
+    "joint_order": [
+      "pinky",
+      "ring",
+      "middle",
+      "index",
+      "thumb_bend",
+      "thumb_rotation"
+    ],
+    "open_features": [
+      0.5773510932922363,
+      0.30533838272094727,
+      0.24056820571422577,
+      0.23363888263702393,
+      0.15913140773773193,
+      0.9312691688537598
+    ],
+    "open_q": [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    "schema": "inspire.optical.calibration.v1",
+    "side": "right"
+  },
+  "samples_per_pose": 30,
+  "schema": "inspire.optical.calibration.bundle.v1",
+  "tracker_source": "xrobotoolkit_sdk.openxr26"
+}

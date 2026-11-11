@@ -138,6 +138,8 @@ The `etc/` directory mirrors the layout under `/etc` on the robot. `etc/systemd/
 |---|---|---|
 | `inspire-g1.service` | Inspire RH56DFX hand service (`inspire_g1`) | disabled (pulled in by the bringup) |
 | `gear-sonic.service` | SONIC deploy stack (`gear_sonic_deploy/deploy.sh`) | disabled (pulled in by the bringup) |
+| `pico-manager.service` | Official PICO manager with optical-hand export | manual / pulled in by PICO teleop |
+| `pico-hand-track-teleop.service` | Starts the manager, ROS bringup and hand adapter via rocker | manual |
 | `ros2-g1-gear-sonic-bringup.service` | `g1_bringup` in the `ghcr.io/jsk-ros-pkg/g1_ros:latest` container via `rocker` | manual |
 
 `etc/sysctl/` holds kernel tuning the DDS middleware needs:
@@ -182,6 +184,35 @@ journalctl -u gear-sonic -f
 > `ros2-g1-gear-sonic-bringup.service` runs the `ghcr.io/jsk-ros-pkg/g1_ros:latest` container image (built from `master`) by default, not your local workspace. After CI publishes an updated image from `master`, run `docker pull ghcr.io/jsk-ros-pkg/g1_ros:latest` before starting the service to pick up those changes.
 >
 > You can also try PR changes before merging: CI publishes images for PRs from this repository (not forks), tagged with the sanitized source branch name and the first seven characters of the PR head commit SHA. After CI publishes the image, run `docker pull ghcr.io/jsk-ros-pkg/g1_ros:<sha7>`, replace `:latest` with `:<sha7>` in the installed service's `ExecStart`, and run `sudo systemctl daemon-reload` before starting the service. Replace `<sha7>` with the PR head commit's seven-character SHA.
+
+### PICO hand teleoperation
+
+Apply the optical-hand export patch once (pending [upstream PR #292](https://github.com/NVlabs/GR00T-WholeBodyControl/pull/292)):
+
+With ROS bringup stopped and the robot supported, start the services below.
+Connect PICO and finish calibration; the manager activates its virtual environment
+and opens ports 5556/5560 before ROS bringup starts. ROS retains joint states and
+hand control while the official manager controls the body.
+
+```shell
+sudo systemctl start --no-block pico-hand-track-teleop.service
+journalctl -fu pico-manager.service
+# Enable hand following from a sourced ROS shell with ROS_DOMAIN_ID=164.
+ros2 service call /pico_hand_adapter/enable std_srvs/srv/SetBool '{data: true}'
+```
+
+G1 bringup activates both hand controllers; following starts disabled and requires
+both hands tracked and fresh hand joint states. Tracking timeout or manager restart
+requires enabling again. Keep `upper_body_controller` inactive.
+
+```shell
+ros2 service call /pico_hand_adapter/enable std_srvs/srv/SetBool '{data: false}'
+sudo systemctl stop pico-hand-track-teleop.service
+```
+
+This leaves the manager, ROS bringup and SONIC running. To end the session, support
+the robot and stop those services too. To return to ROS body control, stop the
+manager and restart ROS bringup.
 
 ## Contribution
 
