@@ -187,13 +187,7 @@ journalctl -u gear-sonic -f
 
 ### PICO hand teleoperation
 
-Requires XRoboToolkit PC Service and `~/GR00T-WholeBodyControl/.venv_teleop`.
 Apply the optical-hand export patch once (pending [upstream PR #292](https://github.com/NVlabs/GR00T-WholeBodyControl/pull/292)):
-
-```shell
-git -C ~/GR00T-WholeBodyControl apply --check /path/to/g1_ros/g1_pico_teleop/patches/pico_manager_optical_hands.patch
-git -C ~/GR00T-WholeBodyControl apply /path/to/g1_ros/g1_pico_teleop/patches/pico_manager_optical_hands.patch
-```
 
 With ROS bringup stopped and the robot supported, start the services below.
 Connect PICO and finish calibration; the manager activates its virtual environment
