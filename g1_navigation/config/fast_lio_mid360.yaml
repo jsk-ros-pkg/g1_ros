@@ -1,0 +1,47 @@
+/**:
+  ros__parameters:
+    # FAST-LIO2 odometry for Livox mid360 + built-in IMU.
+    # Input is livox_ros_driver2/CustomMsg (lidar_type=1) from
+    # livox_driver.launch.py, on dedicated topics (unitree keeps /livox/lidar
+    # PointCloud2 for the scan bridge). Publishes odom -> base_link.
+    common:
+      lid_topic: /livox/lidar_custom   # livox_ros_driver2/msg/CustomMsg
+      imu_topic: /livox/imu_custom
+      con_frame: false
+      con_frame_num: 1
+      cut_frame: false
+      cut_frame_num: 1
+      time_lag_imu_to_lidar: 0.0
+
+    preprocess:
+      lidar_type: 1          # 1 = Livox
+      scan_line: 4
+      timestamp_unit: 3      # 3 = nanoseconds
+      blind: 0.5
+
+    mapping:
+      acc_cov: 0.1
+      gyr_cov: 0.1
+      b_acc_cov: 0.0001
+      b_gyr_cov: 0.0001
+      fov_degree: 360.0
+      det_range: 100.0
+      extrinsic_est_en: false
+      # Livox mid360 IMU->LiDAR extrinsic (factory default).
+      extrinsic_T: [-0.011, -0.02329, 0.04412]
+      extrinsic_R: [1.0, 0.0, 0.0,
+                    0.0, 1.0, 0.0,
+                    0.0, 0.0, 1.0]
+
+    publish:
+      path_en: false
+      scan_publish_en: true
+      dense_publish_en: false
+      scan_bodyframe_pub_en: false
+      tf_send_en: true
+
+    # Frame names (fork dependent). base_link is bolted onto the robot root
+    # (pelvis) by a static TF in localization.launch.py.
+    odom_frame: odom
+    baselink_frame: base_link
+    lidar_frame: livox_frame
