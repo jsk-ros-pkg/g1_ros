@@ -73,6 +73,16 @@ ros2 topic pub --once /robotsound sound_play_msgs/msg/SoundRequest "{sound: -2, 
 ros2 run g1_hardware play_audio.py audio.wav
 ```
 
+## Microphone
+
+USB microphone capture is a temporary workaround for [unitreerobotics/unitree_sdk2_python#143](https://github.com/unitreerobotics/unitree_sdk2_python/issues/143), where the Unitree SDK's built-in microphone stream on G1 PC2 returns only zeros. The launch file below captures the USB microphone directly via ALSA; `ros-usb-microphone.service` runs it in a separate container with ALSA access. Once that issue is fixed and the built-in microphone receiver delivers real audio, this USB capture and service will no longer be needed.
+
+```shell
+ros2 launch g1_hardware usb_microphone.launch.py
+# Pick the device explicitly (see `arecord -L`)
+ros2 launch g1_hardware usb_microphone.launch.py device:=plughw:CARD=<card name>,DEV=0
+```
+
 ## gear_sonic (SONIC) locomotion
 
 `g1_hardware` provides `gear_sonic_interface`, a bridge that sends locomotion, VR 3-point upper-body and SMPL-motion commands to the [GR00T-WholeBodyControl](https://github.com/NVlabs/GR00T-WholeBodyControl) (SONIC) deploy stack over ZMQ, and `gear_sonic_controller`, a `FollowJointTrajectory` action server that lets MoveIt execute trajectories through SONIC (FK → VR 3-point targets). Enable both with `use_gear_sonic:=true` on `hardware.launch.py` or `g1_bringup.launch.py`.
@@ -141,6 +151,7 @@ The `etc/` directory mirrors the layout under `/etc` on the robot. `etc/systemd/
 | `pico-manager.service` | Official PICO manager with optical-hand export | manual / pulled in by PICO teleop |
 | `pico-hand-track-teleop.service` | Starts the manager, ROS bringup and hand adapter via rocker | manual |
 | `ros2-g1-gear-sonic-bringup.service` | `g1_bringup` in the `ghcr.io/jsk-ros-pkg/g1_ros:latest` container via `rocker` | manual |
+| `ros-usb-microphone.service` | `g1_hardware/usb_microphone.launch.py` (USB mic → `/microphone/audio`) in a separate container with ALSA access | disabled (pulled in by the bringup) |
 
 `etc/sysctl/` holds kernel tuning the DDS middleware needs:
 
@@ -166,18 +177,19 @@ ansible-playbook -i <robot-host>, -u unitree --become \
     etc/install.yml
 ```
 
-No unit autostarts at boot. `ros2-g1-gear-sonic-bringup.service` pulls in `gear-sonic.service` and `inspire-g1.service` via `Requires=`, so starting the bringup starts all three.
+No unit autostarts at boot. `ros2-g1-gear-sonic-bringup.service` pulls in `gear-sonic.service` and `inspire-g1.service` via `Requires=`, and `ros-usb-microphone.service` via `Wants=`, so starting the bringup starts all four.
 
 ### Start / stop
 
 ```shell
-# Start SONIC + Inspire hand + the ROS bringup (pulled in via Requires=)
+# Start SONIC + Inspire hand + USB microphone + the ROS bringup
 sudo systemctl start ros2-g1-gear-sonic-bringup
 # Stop
 sudo systemctl stop ros2-g1-gear-sonic-bringup gear-sonic inspire-g1
 # Follow logs
 journalctl -u ros2-g1-gear-sonic-bringup -f
 journalctl -u gear-sonic -f
+journalctl -u ros-usb-microphone -f
 ```
 
 > [!NOTE]
