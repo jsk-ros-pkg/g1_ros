@@ -190,6 +190,13 @@ def _launch_setup(context, *args, **kwargs):
         audio_nodes.append(
             Node(
                 package="g1_hardware",
+                executable="g1_audio_capture_node",
+                parameters=[{"network_interface": network_interface}],
+            )
+        )
+        audio_nodes.append(
+            Node(
+                package="g1_hardware",
                 executable="g1_audio_interface_node",
                 parameters=[{"network_interface": network_interface}],
             )
@@ -272,7 +279,7 @@ def generate_launch_description():
                 "use_audio",
                 default_value="true",
                 choices=["true", "false"],
-                description="Start the G1 PCM playback and TTS interface",
+                description="Start G1 audio playback, microphone capture, TTS and ASR",
             ),
             DeclareLaunchArgument(
                 "use_gear_sonic",
