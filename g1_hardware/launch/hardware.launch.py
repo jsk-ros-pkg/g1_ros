@@ -92,6 +92,7 @@ def _launch_setup(context, *args, **kwargs):
     kd = LaunchConfiguration("kd").perform(context)
     waist_kp = LaunchConfiguration("waist_kp").perform(context)
     waist_kd = LaunchConfiguration("waist_kd").perform(context)
+    inspire_transport = LaunchConfiguration("inspire_transport").perform(context)
     inspire_command_topic = LaunchConfiguration("inspire_command_topic").perform(
         context
     )
@@ -99,6 +100,8 @@ def _launch_setup(context, *args, **kwargs):
     inspire_state_timeout_sec = LaunchConfiguration(
         "inspire_state_timeout_sec"
     ).perform(context)
+    inspire_right_device = LaunchConfiguration("inspire_right_device").perform(context)
+    inspire_left_device = LaunchConfiguration("inspire_left_device").perform(context)
     close_hand_on_deactivate = LaunchConfiguration("close_hand_on_deactivate").perform(
         context
     )
@@ -114,9 +117,12 @@ def _launch_setup(context, *args, **kwargs):
             "kd": kd,
             "waist_kp": waist_kp,
             "waist_kd": waist_kd,
+            "inspire_transport": inspire_transport,
             "inspire_command_topic": inspire_command_topic,
             "inspire_state_topic": inspire_state_topic,
             "inspire_state_timeout_sec": inspire_state_timeout_sec,
+            "inspire_right_device": inspire_right_device,
+            "inspire_left_device": inspire_left_device,
             "close_hand_on_deactivate": close_hand_on_deactivate,
             "use_pelvis_lift": use_pelvis_lift,
         },
@@ -248,6 +254,12 @@ def generate_launch_description():
                 description="Waist velocity (damping) gain",
             ),
             DeclareLaunchArgument(
+                "inspire_transport",
+                default_value="serial",
+                choices=["serial", "dds"],
+                description="RH56DFX hand transport",
+            ),
+            DeclareLaunchArgument(
                 "inspire_command_topic",
                 default_value="rt/inspire/cmd",
                 description="DDS topic for RH56DFX commands",
@@ -260,7 +272,17 @@ def generate_launch_description():
             DeclareLaunchArgument(
                 "inspire_state_timeout_sec",
                 default_value="3.0",
-                description="Seconds to wait for the first RH56DFX state message",
+                description="Seconds to wait for the first RH56DFX DDS state",
+            ),
+            DeclareLaunchArgument(
+                "inspire_right_device",
+                default_value="/dev/inspire_right",
+                description="RH56DFX right serial device, or 'none' to skip this hand",
+            ),
+            DeclareLaunchArgument(
+                "inspire_left_device",
+                default_value="/dev/inspire_left",
+                description="RH56DFX left serial device, or 'none' to skip this hand",
             ),
             DeclareLaunchArgument(
                 "close_hand_on_deactivate",

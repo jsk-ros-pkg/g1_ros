@@ -18,6 +18,8 @@ pkg_check_modules(GSTREAMER REQUIRED IMPORTED_TARGET gstreamer-app-1.0 gstreamer
 
 ament_auto_add_library(${PROJECT_NAME} SHARED
   src/g1_hardware_interface.cpp
+  src/inspire_rh56dfx_dds_hardware_interface.cpp
+  src/rh56dfx_hand.cpp
   src/inspire_rh56dfx_hardware_interface.cpp
 )
 

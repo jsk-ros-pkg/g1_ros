@@ -28,25 +28,24 @@
 
 #pragma once
 
+#include <array>
 #include <hardware_interface/system_interface.hpp>
 #include <hardware_interface/types/hardware_interface_return_values.hpp>
-#include <mutex>
+#include <memory>
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp_lifecycle/state.hpp>
 #include <string>
-#include <unitree/idl/go2/MotorCmds_.hpp>
-#include <unitree/idl/go2/MotorStates_.hpp>
-#include <unitree/robot/channel/channel_publisher.hpp>
-#include <unitree/robot/channel/channel_subscriber.hpp>
 #include <vector>
 
 namespace g1_hardware
 {
 
-class InspireRH56DFXHardwareInterface : public hardware_interface::SystemInterface
+class RH56DFXHand;
+
+class RH56DFXHardwareBase : public hardware_interface::SystemInterface
 {
 public:
-  RCLCPP_SHARED_PTR_DEFINITIONS(InspireRH56DFXHardwareInterface)
+  RCLCPP_SHARED_PTR_DEFINITIONS(RH56DFXHardwareBase)
 
   hardware_interface::CallbackReturn on_init(const hardware_interface::HardwareInfo& info) override;
 
@@ -77,11 +76,14 @@ public:
     double deactivation_position;
   };
 
+protected:
+  using Positions = std::array<std::array<double, 6>, 2>;
+  virtual void connect() = 0;
+  virtual Positions positions() = 0;
+  virtual void command(const Positions& target) = 0;
+  virtual void disconnect(const Positions* final_target) = 0;
+
 private:
-  std::string network_interface_;
-  std::string command_topic_{"rt/inspire/cmd"};
-  std::string state_topic_{"rt/inspire/state"};
-  double state_timeout_sec_{3.0};
   bool close_hand_on_deactivate_{true};
 
   std::vector<JointConfig> joint_configs_;
@@ -90,13 +92,16 @@ private:
   std::vector<double> hw_commands_;
 
   int active_command_interfaces_{0};
+};
 
-  unitree::robot::ChannelPublisherPtr<unitree_go::msg::dds_::MotorCmds_> hand_command_publisher_;
-  unitree::robot::ChannelSubscriberPtr<unitree_go::msg::dds_::MotorStates_> hand_state_subscriber_;
-  unitree_go::msg::dds_::MotorCmds_ command_msg_;
-  unitree_go::msg::dds_::MotorStates_ state_msg_;
-  std::mutex state_mutex_;
-  bool state_received_{false};
+class InspireRH56DFXHardwareInterface : public RH56DFXHardwareBase
+{
+private:
+  void connect() override;
+  Positions positions() override;
+  void command(const Positions& target) override;
+  void disconnect(const Positions* final_target) override;
+  std::array<std::shared_ptr<RH56DFXHand>, 2> hands_;
 };
 
 } // namespace g1_hardware

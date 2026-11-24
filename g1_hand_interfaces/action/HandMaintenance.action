@@ -1,0 +1,4 @@
+# The action endpoint selects the hand and operation.
+---
+string message
+---

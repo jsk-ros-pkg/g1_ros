@@ -10,9 +10,12 @@
   <xacro:arg name="kd" default="1.5"/>
   <xacro:arg name="waist_kp" default="200.0"/>
   <xacro:arg name="waist_kd" default="2.0"/>
+  <xacro:arg name="inspire_transport" default="serial"/>
   <xacro:arg name="inspire_command_topic" default="rt/inspire/cmd"/>
   <xacro:arg name="inspire_state_topic" default="rt/inspire/state"/>
   <xacro:arg name="inspire_state_timeout_sec" default="3.0"/>
+  <xacro:arg name="inspire_right_device" default="/dev/inspire_right"/>
+  <xacro:arg name="inspire_left_device" default="/dev/inspire_left"/>
   <xacro:arg name="close_hand_on_deactivate" default="true"/>
   <xacro:arg name="use_pelvis_lift" default="false"/>
   <xacro:include filename="$(find g1_description)/g1_29dof_rev_1_0_with_inspire_hand_DFQ.urdf"/>
@@ -24,5 +27,5 @@
     <xacro:pelvis_lift/>
   </xacro:if>
   <xacro:g1_ros2_control name="G1RealSystem" network_interface="$(arg network_interface)" kp="$(arg kp)" kd="$(arg kd)" waist_kp="$(arg waist_kp)" waist_kd="$(arg waist_kd)"/>
-  <xacro:inspire_rh56dfx_ros2_control name="InspireRH56DFXSystem" network_interface="$(arg network_interface)" command_topic="$(arg inspire_command_topic)" state_topic="$(arg inspire_state_topic)" state_timeout_sec="$(arg inspire_state_timeout_sec)" close_hand_on_deactivate="$(arg close_hand_on_deactivate)"/>
+  <xacro:inspire_rh56dfx_ros2_control name="InspireRH56DFXSystem" network_interface="$(arg network_interface)" transport="$(arg inspire_transport)" command_topic="$(arg inspire_command_topic)" state_topic="$(arg inspire_state_topic)" state_timeout_sec="$(arg inspire_state_timeout_sec)" right_device="$(arg inspire_right_device)" left_device="$(arg inspire_left_device)" close_hand_on_deactivate="$(arg close_hand_on_deactivate)"/>
 </robot>

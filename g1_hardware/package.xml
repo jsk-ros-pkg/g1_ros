@@ -16,6 +16,7 @@
   <exec_depend>gstreamer1.0-plugins-ugly</exec_depend>
   <depend>audio_common_msgs</depend>
   <depend>control_msgs</depend>
+  <depend>g1_hand_interfaces</depend>
   <depend>gear_sonic_interfaces</depend>
   <depend>geometry_msgs</depend>
   <depend>hardware_interface</depend>

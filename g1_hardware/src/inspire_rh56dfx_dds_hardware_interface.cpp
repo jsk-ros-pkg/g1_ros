@@ -1,0 +1,109 @@
+#include "g1_hardware/inspire_rh56dfx_hardware_interface.hpp"
+
+#include <chrono>
+#include <cmath>
+#include <condition_variable>
+#include <mutex>
+#include <stdexcept>
+#include <thread>
+
+#include <pluginlib/class_list_macros.hpp>
+#include <unitree/idl/go2/MotorCmds_.hpp>
+#include <unitree/idl/go2/MotorStates_.hpp>
+#include <unitree/robot/channel/channel_factory.hpp>
+#include <unitree/robot/channel/channel_publisher.hpp>
+#include <unitree/robot/channel/channel_subscriber.hpp>
+
+namespace g1_hardware
+{
+class InspireRH56DFXDDSHardwareInterface : public RH56DFXHardwareBase
+{
+  using MotorStates = unitree_go::msg::dds_::MotorStates_;
+  using MotorCmds = unitree_go::msg::dds_::MotorCmds_;
+
+  struct State
+  {
+    Positions positions{};
+    std::mutex mutex;
+    std::condition_variable ready;
+    bool received{false};
+  };
+
+  std::shared_ptr<State> state_;
+  unitree::robot::ChannelPublisherPtr<MotorCmds> publisher_;
+  unitree::robot::ChannelSubscriberPtr<MotorStates> subscriber_;
+  MotorCmds message_;
+
+  void connect() override
+  {
+    const auto& params = info_.hardware_parameters;
+    const double timeout = std::stod(params.at("state_timeout_sec"));
+    if (!std::isfinite(timeout) || timeout < 0)
+      throw std::invalid_argument("Invalid state_timeout_sec");
+    unitree::robot::ChannelFactory::Instance()->Init(0, params.at("network_interface"));
+    publisher_ =
+        std::make_shared<unitree::robot::ChannelPublisher<MotorCmds>>(params.at("command_topic"));
+    publisher_->InitChannel();
+    state_ = std::make_shared<State>();
+    message_.cmds().resize(12);
+    subscriber_ =
+        std::make_shared<unitree::robot::ChannelSubscriber<MotorStates>>(params.at("state_topic"));
+    subscriber_->InitChannel(
+        [state = state_](const void* data) {
+          const auto& motors = static_cast<const MotorStates*>(data)->states();
+          if (motors.size() < 12)
+            return;
+          std::lock_guard lock(state->mutex);
+          size_t index = 0;
+          for (auto& hand : state->positions)
+            for (auto& q : hand)
+              q = motors[index++].q();
+          if (!state->received) {
+            state->received = true;
+            state->ready.notify_one();
+          }
+        },
+        1);
+    std::unique_lock lock(state_->mutex);
+    if (!state_->ready.wait_for(lock, std::chrono::duration<double>(timeout),
+                                [this] { return state_->received; }))
+      throw std::runtime_error("No 12-motor state on " + params.at("state_topic") +
+                               ". Is inspire_g1 running?");
+  }
+
+  Positions positions() override
+  {
+    if (!state_)
+      return {};
+    std::lock_guard lock(state_->mutex);
+    return state_->positions;
+  }
+
+  void command(const Positions& target) override
+  {
+    size_t index = 0;
+    for (const auto& hand : target)
+      for (const auto q : hand)
+        message_.cmds()[index++].q(static_cast<float>(q));
+    publisher_->Write(message_);
+  }
+
+  void disconnect(const Positions* final_target) override
+  {
+    if (publisher_ && final_target) {
+      // Give the bridge time to receive the final command before closing the DDS channel.
+      for (int i = 0; i < 5; ++i) {
+        command(*final_target);
+        if (i < 4)
+          std::this_thread::sleep_for(std::chrono::milliseconds(20));
+      }
+    }
+    subscriber_.reset();
+    publisher_.reset();
+    state_.reset();
+  }
+};
+} // namespace g1_hardware
+
+PLUGINLIB_EXPORT_CLASS(g1_hardware::InspireRH56DFXDDSHardwareInterface,
+                       hardware_interface::SystemInterface)

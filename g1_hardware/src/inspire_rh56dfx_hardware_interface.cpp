@@ -28,16 +28,15 @@
 
 #include "g1_hardware/inspire_rh56dfx_hardware_interface.hpp"
 
+#include "rh56dfx_hand.hpp"
+
 #include <algorithm>
-#include <chrono>
 #include <cmath>
 #include <exception>
 #include <hardware_interface/lexical_casts.hpp>
 #include <hardware_interface/types/hardware_interface_type_values.hpp>
 #include <pluginlib/class_list_macros.hpp>
 #include <stdexcept>
-#include <thread>
-#include <unitree/robot/channel/channel_factory.hpp>
 #include <unordered_map>
 
 namespace g1_hardware
@@ -45,12 +44,11 @@ namespace g1_hardware
 namespace
 {
 
-constexpr size_t kMotorCount = 12;
+constexpr size_t kFingers = 6;
+constexpr std::array<const char*, 2> kSide{"right", "left"};
 
-using JointConfig = InspireRH56DFXHardwareInterface::JointConfig;
+using JointConfig = RH56DFXHardwareBase::JointConfig;
 
-// The Inspire DDS bridge uses the normalized position convention from
-// hand_example.cpp: 0.0 = closed, 1.0 = open.
 // The table stores ROS joint positions for open, fully closed, and deactivation states.
 // The deactivation pose matches inspire_dfx_hand_open_close_demo.py, including its
 // collision-free thumb yaw position.
@@ -93,31 +91,12 @@ double JointPositionToOpenFraction(double position, const JointConfig& cfg)
 } // namespace
 
 hardware_interface::CallbackReturn
-InspireRH56DFXHardwareInterface::on_init(const hardware_interface::HardwareInfo& info)
+RH56DFXHardwareBase::on_init(const hardware_interface::HardwareInfo& info)
 {
   if (hardware_interface::SystemInterface::on_init(info) != CallbackReturn::SUCCESS) {
     return CallbackReturn::ERROR;
   }
 
-  if (info.hardware_parameters.count("network_interface")) {
-    network_interface_ = info.hardware_parameters.at("network_interface");
-  }
-  if (info.hardware_parameters.count("command_topic")) {
-    command_topic_ = info.hardware_parameters.at("command_topic");
-  }
-  if (info.hardware_parameters.count("state_topic")) {
-    state_topic_ = info.hardware_parameters.at("state_topic");
-  }
-  if (info.hardware_parameters.count("state_timeout_sec")) {
-    try {
-      state_timeout_sec_ = std::stod(info.hardware_parameters.at("state_timeout_sec"));
-    } catch (const std::exception& e) {
-      RCLCPP_FATAL(rclcpp::get_logger("InspireRH56DFXHardwareInterface"),
-                   "Invalid state_timeout_sec parameter '%s': %s",
-                   info.hardware_parameters.at("state_timeout_sec").c_str(), e.what());
-      return CallbackReturn::ERROR;
-    }
-  }
   if (info.hardware_parameters.count("close_hand_on_deactivate")) {
     const auto& parameter_value = info.hardware_parameters.at("close_hand_on_deactivate");
     try {
@@ -141,7 +120,7 @@ InspireRH56DFXHardwareInterface::on_init(const hardware_interface::HardwareInfo&
     auto it = kJointNameToConfig.find(name);
     if (it == kJointNameToConfig.end()) {
       RCLCPP_FATAL(rclcpp::get_logger("InspireRH56DFXHardwareInterface"),
-                   "Unknown RH56DFX joint '%s' - no DDS motor mapping defined.", name.c_str());
+                   "Unknown RH56DFX joint '%s' - no motor mapping defined.", name.c_str());
       return CallbackReturn::ERROR;
     }
     joint_configs_[i] = it->second;
@@ -153,17 +132,10 @@ InspireRH56DFXHardwareInterface::on_init(const hardware_interface::HardwareInfo&
                 it->second.motor_index, it->second.open_position, it->second.closed_position);
   }
 
-  RCLCPP_INFO(rclcpp::get_logger("InspireRH56DFXHardwareInterface"),
-              "Initialized: command_topic=%s, state_topic=%s, network_interface=%s, "
-              "close_hand_on_deactivate=%s",
-              command_topic_.c_str(), state_topic_.c_str(), network_interface_.c_str(),
-              close_hand_on_deactivate_ ? "true" : "false");
-
   return CallbackReturn::SUCCESS;
 }
 
-std::vector<hardware_interface::StateInterface>
-InspireRH56DFXHardwareInterface::export_state_interfaces()
+std::vector<hardware_interface::StateInterface> RH56DFXHardwareBase::export_state_interfaces()
 {
   std::vector<hardware_interface::StateInterface> si;
   for (size_t i = 0; i < info_.joints.size(); ++i) {
@@ -173,8 +145,7 @@ InspireRH56DFXHardwareInterface::export_state_interfaces()
   return si;
 }
 
-std::vector<hardware_interface::CommandInterface>
-InspireRH56DFXHardwareInterface::export_command_interfaces()
+std::vector<hardware_interface::CommandInterface> RH56DFXHardwareBase::export_command_interfaces()
 {
   std::vector<hardware_interface::CommandInterface> ci;
   for (size_t i = 0; i < info_.joints.size(); ++i) {
@@ -184,71 +155,20 @@ InspireRH56DFXHardwareInterface::export_command_interfaces()
 }
 
 hardware_interface::CallbackReturn
-InspireRH56DFXHardwareInterface::on_activate(const rclcpp_lifecycle::State& /*previous_state*/)
+RH56DFXHardwareBase::on_activate(const rclcpp_lifecycle::State& /*previous_state*/)
 {
   RCLCPP_INFO(rclcpp::get_logger("InspireRH56DFXHardwareInterface"),
               "Activating RH56DFX hand interface.");
 
-  unitree::robot::ChannelFactory::Instance()->Init(0, network_interface_);
-
-  state_received_ = false;
-  command_msg_.cmds().resize(kMotorCount);
-  state_msg_.states().resize(kMotorCount);
-
-  hand_command_publisher_.reset(
-      new unitree::robot::ChannelPublisher<unitree_go::msg::dds_::MotorCmds_>(command_topic_));
-  hand_command_publisher_->InitChannel();
-
-  hand_state_subscriber_.reset(
-      new unitree::robot::ChannelSubscriber<unitree_go::msg::dds_::MotorStates_>(state_topic_));
-  hand_state_subscriber_->InitChannel(
-      [this](const void* msg) {
-        auto s = reinterpret_cast<const unitree_go::msg::dds_::MotorStates_*>(msg);
-        std::lock_guard<std::mutex> lock(state_mutex_);
-        state_msg_ = *s;
-        state_received_ = true;
-      },
-      1);
-
-  const auto deadline = std::chrono::steady_clock::now() +
-                        std::chrono::duration_cast<std::chrono::steady_clock::duration>(
-                            std::chrono::duration<double>(state_timeout_sec_));
-  while (!state_received_ && std::chrono::steady_clock::now() < deadline) {
-    std::this_thread::sleep_for(std::chrono::milliseconds(20));
-  }
-
-  if (!state_received_) {
-    RCLCPP_FATAL(rclcpp::get_logger("InspireRH56DFXHardwareInterface"),
-                 "No hand state received on '%s' within %.1f s. Is inspire_g1 running?",
-                 state_topic_.c_str(), state_timeout_sec_);
-    hand_command_publisher_.reset();
-    hand_state_subscriber_.reset();
+  try {
+    connect();
+  } catch (const std::exception& e) {
+    disconnect(nullptr);
+    RCLCPP_ERROR(get_logger(), "Could not activate RH56DFX hands: %s", e.what());
     return CallbackReturn::ERROR;
   }
-
-  size_t received_motor_count = 0;
-  {
-    std::lock_guard<std::mutex> lock(state_mutex_);
-    received_motor_count = state_msg_.states().size();
-    if (received_motor_count >= kMotorCount) {
-      for (size_t i = 0; i < info_.joints.size(); ++i) {
-        const auto& cfg = joint_configs_[i];
-        const double open_fraction = state_msg_.states().at(cfg.motor_index).q();
-        hw_positions_[i] = OpenFractionToJointPosition(open_fraction, cfg);
-        hw_velocities_[i] = 0.0;
-        hw_commands_[i] = hw_positions_[i];
-      }
-    }
-  }
-
-  if (received_motor_count < kMotorCount) {
-    RCLCPP_FATAL(rclcpp::get_logger("InspireRH56DFXHardwareInterface"),
-                 "Hand state on '%s' has %zu motors, expected at least %zu.", state_topic_.c_str(),
-                 received_motor_count, kMotorCount);
-    hand_command_publisher_.reset();
-    hand_state_subscriber_.reset();
-    return CallbackReturn::ERROR;
-  }
+  read(rclcpp::Time(0), rclcpp::Duration::from_seconds(0));
+  std::copy(hw_positions_.begin(), hw_positions_.end(), hw_commands_.begin());
 
   active_command_interfaces_ = 0;
   RCLCPP_INFO(rclcpp::get_logger("InspireRH56DFXHardwareInterface"), "Activated.");
@@ -256,42 +176,26 @@ InspireRH56DFXHardwareInterface::on_activate(const rclcpp_lifecycle::State& /*pr
 }
 
 hardware_interface::CallbackReturn
-InspireRH56DFXHardwareInterface::on_deactivate(const rclcpp_lifecycle::State& /*previous_state*/)
+RH56DFXHardwareBase::on_deactivate(const rclcpp_lifecycle::State& /*previous_state*/)
 {
-  if (close_hand_on_deactivate_ && hand_command_publisher_) {
-    command_msg_.cmds().resize(kMotorCount);
-    for (size_t i = 0; i < info_.joints.size(); ++i) {
-      const auto& cfg = joint_configs_[i];
-      hw_commands_[i] = cfg.deactivation_position;
-      command_msg_.cmds()
-          .at(cfg.motor_index)
-          .q(static_cast<float>(JointPositionToOpenFraction(hw_commands_[i], cfg)));
-    }
-
-    RCLCPP_INFO(rclcpp::get_logger("InspireRH56DFXHardwareInterface"),
-                "Closing RH56DFX hands before deactivation.");
-
-    // Repeat briefly so the external serial bridge receives the final target before DDS teardown.
-    constexpr size_t kPublishCount = 5;
-    constexpr auto kPublishPeriod = std::chrono::milliseconds(20);
-    for (size_t i = 0; i < kPublishCount; ++i) {
-      hand_command_publisher_->Write(command_msg_);
-      if (i + 1 < kPublishCount) {
-        std::this_thread::sleep_for(kPublishPeriod);
-      }
-    }
+  Positions targets{};
+  for (const auto& cfg : joint_configs_) {
+    targets[cfg.motor_index / kFingers][cfg.motor_index % kFingers] =
+        JointPositionToOpenFraction(cfg.deactivation_position, cfg);
   }
-
-  hand_command_publisher_.reset();
-  hand_state_subscriber_.reset();
   active_command_interfaces_ = 0;
-  RCLCPP_INFO(rclcpp::get_logger("InspireRH56DFXHardwareInterface"), "Deactivated.");
+  try {
+    disconnect(close_hand_on_deactivate_ ? &targets : nullptr);
+  } catch (const std::exception& e) {
+    RCLCPP_ERROR(get_logger(), "Failed to close RH56DFX hands: %s", e.what());
+    return CallbackReturn::ERROR;
+  }
   return CallbackReturn::SUCCESS;
 }
 
-hardware_interface::return_type InspireRH56DFXHardwareInterface::perform_command_mode_switch(
-    const std::vector<std::string>& start_interfaces,
-    const std::vector<std::string>& stop_interfaces)
+hardware_interface::return_type
+RH56DFXHardwareBase::perform_command_mode_switch(const std::vector<std::string>& start_interfaces,
+                                                 const std::vector<std::string>& stop_interfaces)
 {
   auto is_own_command_interface = [this](const std::string& interface_name) {
     const auto separator = interface_name.find('/');
@@ -317,31 +221,15 @@ hardware_interface::return_type InspireRH56DFXHardwareInterface::perform_command
   return hardware_interface::return_type::OK;
 }
 
-hardware_interface::return_type
-InspireRH56DFXHardwareInterface::read(const rclcpp::Time& /*time*/, const rclcpp::Duration& period)
+hardware_interface::return_type RH56DFXHardwareBase::read(const rclcpp::Time& /*time*/,
+                                                          const rclcpp::Duration& period)
 {
-  if (!state_received_) {
-    return hardware_interface::return_type::OK;
-  }
-
-  unitree_go::msg::dds_::MotorStates_ state;
-  {
-    std::lock_guard<std::mutex> lock(state_mutex_);
-    state = state_msg_;
-  }
-
-  if (state.states().size() < kMotorCount) {
-    RCLCPP_ERROR(rclcpp::get_logger("InspireRH56DFXHardwareInterface"),
-                 "Hand state on '%s' has %zu motors, expected at least %zu.", state_topic_.c_str(),
-                 state.states().size(), kMotorCount);
-    return hardware_interface::return_type::ERROR;
-  }
-
+  const auto state = positions();
   const double dt = period.seconds();
   for (size_t i = 0; i < info_.joints.size(); ++i) {
     const double previous_position = hw_positions_[i];
     const auto& cfg = joint_configs_[i];
-    const double open_fraction = state.states().at(cfg.motor_index).q();
+    const double open_fraction = state[cfg.motor_index / kFingers][cfg.motor_index % kFingers];
     hw_positions_[i] = OpenFractionToJointPosition(open_fraction, cfg);
     hw_velocities_[i] = dt > 1e-9 ? (hw_positions_[i] - previous_position) / dt : 0.0;
   }
@@ -349,24 +237,70 @@ InspireRH56DFXHardwareInterface::read(const rclcpp::Time& /*time*/, const rclcpp
   return hardware_interface::return_type::OK;
 }
 
-hardware_interface::return_type
-InspireRH56DFXHardwareInterface::write(const rclcpp::Time& /*time*/,
-                                       const rclcpp::Duration& /*period*/)
+hardware_interface::return_type RH56DFXHardwareBase::write(const rclcpp::Time& /*time*/,
+                                                           const rclcpp::Duration& /*period*/)
 {
-  if (!hand_command_publisher_ || active_command_interfaces_ == 0) {
+  if (active_command_interfaces_ == 0)
     return hardware_interface::return_type::OK;
-  }
-
-  command_msg_.cmds().resize(kMotorCount);
-  for (size_t i = 0; i < info_.joints.size(); ++i) {
+  Positions targets{};
+  for (size_t i = 0; i < joint_configs_.size(); ++i) {
     const auto& cfg = joint_configs_[i];
-    command_msg_.cmds()
-        .at(cfg.motor_index)
-        .q(static_cast<float>(JointPositionToOpenFraction(hw_commands_[i], cfg)));
+    targets[cfg.motor_index / kFingers][cfg.motor_index % kFingers] =
+        JointPositionToOpenFraction(hw_commands_[i], cfg);
   }
-
-  hand_command_publisher_->Write(command_msg_);
+  command(targets);
   return hardware_interface::return_type::OK;
+}
+
+void InspireRH56DFXHardwareInterface::connect()
+{
+  for (size_t i = 0; i < hands_.size(); ++i) {
+    const auto param = info_.hardware_parameters.find(std::string(kSide[i]) + "_device");
+    const std::string device = param == info_.hardware_parameters.end()
+                                   ? std::string("/dev/inspire_") + kSide[i]
+                                   : param->second;
+    if (device == "none")
+      continue;
+    hands_[i] = std::make_shared<RH56DFXHand>(device);
+    hands_[i]->start(get_node(), kSide[i]);
+  }
+}
+
+RH56DFXHardwareBase::Positions InspireRH56DFXHardwareInterface::positions()
+{
+  Positions state;
+  for (size_t i = 0; i < hands_.size(); ++i) {
+    if (hands_[i])
+      state[i] = hands_[i]->positions();
+    else
+      state[i].fill(1.0);
+  }
+  return state;
+}
+
+void InspireRH56DFXHardwareInterface::command(const Positions& targets)
+{
+  for (size_t i = 0; i < hands_.size(); ++i) {
+    if (hands_[i])
+      hands_[i]->command(targets[i]);
+  }
+}
+
+void InspireRH56DFXHardwareInterface::disconnect(const Positions* final_target)
+{
+  std::exception_ptr failure;
+  for (size_t i = 0; i < hands_.size(); ++i) {
+    if (!hands_[i])
+      continue;
+    try {
+      hands_[i]->stop(final_target ? &(*final_target)[i] : nullptr);
+    } catch (...) {
+      failure = std::current_exception();
+    }
+    hands_[i].reset();
+  }
+  if (failure)
+    std::rethrow_exception(failure);
 }
 
 } // namespace g1_hardware
