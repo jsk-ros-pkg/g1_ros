@@ -183,7 +183,9 @@ journalctl -u gear-sonic -f
 > [!NOTE]
 > `ros2-g1-gear-sonic-bringup.service` runs the `ghcr.io/jsk-ros-pkg/g1_ros:latest` container image (built from `master`) by default, not your local workspace. After CI publishes an updated image from `master`, run `docker pull ghcr.io/jsk-ros-pkg/g1_ros:latest` before starting the service to pick up those changes.
 >
-> You can also try PR changes before merging: CI publishes images for PRs from this repository (not forks), tagged with the sanitized source branch name and the first seven characters of the PR head commit SHA. After CI publishes the image, run `docker pull ghcr.io/jsk-ros-pkg/g1_ros:<sha7>`, replace `:latest` with `:<sha7>` in the installed service's `ExecStart`, and run `sudo systemctl daemon-reload` before starting the service. Replace `<sha7>` with the PR head commit's seven-character SHA.
+> To test a branch in your fork, enable GitHub Actions and push the branch (or run CI manually). CI publishes ARM64 images to `ghcr.io/<owner>/g1_ros` (lowercase owner): `master` uses `latest`; other branches use the sanitized branch name and the full commit SHA. Same-repository PRs also publish branch and SHA tags.
+>
+> Run `docker pull ghcr.io/<owner>/g1_ros:<sha>`, replace the image in the installed service's `ExecStart`, and run `sudo systemctl daemon-reload`. New GHCR packages are private by default; make the package public to pull without logging in.
 
 ### PICO hand teleoperation
 

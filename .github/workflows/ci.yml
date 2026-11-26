@@ -2,9 +2,10 @@ name: CI
 
 on:
   push:
-    branches: [master]
+    branches: ['**']
   pull_request:
     branches: [master]
+  workflow_dispatch:
 
 env:
   REGISTRY: ghcr.io
@@ -25,31 +26,40 @@ jobs:
       packages: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - name: Compute image tags and whether to push
         id: meta
+        env:
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          CI_RUNNER: ${{ matrix.runner }}
         run: |
-          # master -> ':latest'; PR -> ':<branch>' and ':<sha7>' (two tags).
+          # master -> ':latest'; other branches and PRs -> ':<branch>' and ':<sha>'.
           # docker tags only allow [A-Za-z0-9_.-] and no '/', so sanitize the branch.
-          image="${REGISTRY}/${IMAGE_NAME}"
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            branch="$(printf '%s' "${{ github.head_ref }}" | sed -e 's#[^A-Za-z0-9.-]#-#g' -e 's#^[.-]*##')"
-            [ -z "$branch" ] && branch="pr"
-            sha="${{ github.event.pull_request.head.sha }}"
-            tags="${image}:${branch:0:100} ${image}:${sha:0:7}"
-          else
+          image="${REGISTRY}/${IMAGE_NAME,,}"
+          if [ "$GITHUB_EVENT_NAME" != "pull_request" ] && [ "$GITHUB_REF" = "refs/heads/master" ]; then
             tags="${image}:latest"
+          else
+            branch="$(printf '%s' "${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}" | sed -e 's#[^A-Za-z0-9.-]#-#g' -e 's#^[.-]*##')"
+            [ -z "$branch" ] && branch="branch"
+            sha="${PR_HEAD_SHA:-$GITHUB_SHA}"
+            if [ "${branch:0:100}" = "latest" ]; then
+              tags="${image}:${sha}"
+            else
+              tags="${image}:${branch:0:100} ${image}:${sha}"
+            fi
           fi
 
-          # Build the image on arm only; publish on master pushes and same-repo PRs.
+          # Build on arm only; publish local pushes, manual runs, and same-repo PRs.
           docker_commit=""
           push=false
-          if [ "${{ matrix.runner }}" = "ubuntu-24.04-arm" ]; then
+          if [ "$CI_RUNNER" = "ubuntu-24.04-arm" ]; then
             docker_commit="${tags%% *}"
-            if [ "${{ github.event_name }}" = "push" ] && [ "${{ github.ref }}" = "refs/heads/master" ]; then
+            if [ "$GITHUB_EVENT_NAME" = "push" ] || [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
               push=true
-            elif [ "${{ github.event_name }}" = "pull_request" ] && \
-                 [ "${{ github.event.pull_request.head.repo.full_name }}" = "${{ github.repository }}" ]; then
+            elif [ "$GITHUB_EVENT_NAME" = "pull_request" ] && [ "$PR_HEAD_REPO" = "$GITHUB_REPOSITORY" ]; then
               push=true
             fi
           fi
