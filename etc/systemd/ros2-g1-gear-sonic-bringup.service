@@ -1,6 +1,8 @@
 [Unit]
 Description=Unitree G1 ROS 2 Gear Sonic Bringup
 Requires=docker.service gear-sonic.service inspire-g1.service
+# Optional (the mic may be unplugged): a failure here does not block bringup.
+Wants=ros-usb-microphone.service
 After=docker.service gear-sonic.service inspire-g1.service
 
 [Service]

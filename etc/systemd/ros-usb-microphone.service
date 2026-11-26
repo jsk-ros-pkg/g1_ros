@@ -1,0 +1,34 @@
+[Unit]
+# Temporary workaround: the Unitree SDK's built-in microphone stream on G1 PC2
+# returns only zeros (https://github.com/unitreerobotics/unitree_sdk2_python/issues/143).
+# Capture the USB microphone directly via ALSA in a separate container instead.
+# Once that issue is fixed and the built-in microphone receiver delivers real
+# audio, this USB capture service will no longer be needed.
+Description=Unitree G1 ROS 2 USB microphone (USB microphone -> /microphone/audio)
+Requires=docker.service
+After=docker.service
+# Stop together with the bringup that pulls this unit in via Wants=.
+PartOf=ros2-g1-gear-sonic-bringup.service
+
+[Service]
+Type=simple
+User=unitree
+WorkingDirectory=/home/unitree
+
+Environment="HOME=/home/unitree"
+Environment="PATH=/home/unitree/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+
+ExecStartPre=-/usr/bin/docker rm -f g1-usb-microphone
+
+# If no USB mic is present, the launch exits. Each retry passes the current
+# ALSA devices to the new container, including any mic plugged in since.
+ExecStart=/home/unitree/.local/bin/rocker --mode non-interactive --name g1-usb-microphone --devices /dev/snd --env ROS_DOMAIN_ID=164 --env FASTDDS_BUILTIN_TRANSPORTS=LARGE_DATA --network host --ipc host ghcr.io/jsk-ros-pkg/g1_ros:latest "bash -lc 'source /root/target_ws/install/setup.bash && exec ros2 launch g1_hardware usb_microphone.launch.py'"
+
+ExecStop=-/usr/bin/docker stop -s SIGINT --time 10 g1-usb-microphone
+
+Restart=always
+RestartSec=10
+TimeoutStopSec=20
+
+StandardOutput=journal
+StandardError=journal

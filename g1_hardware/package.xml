@@ -33,6 +33,7 @@
   <depend>tf2_ros</depend>
   <depend>trajectory_msgs</depend>
   <depend>unitree_sdk2</depend>
+  <exec_depend>audio_capture</exec_depend>
   <exec_depend>sound_play</exec_depend>
   <exec_depend>rclpy</exec_depend>
   <exec_depend>g1_description</exec_depend>
