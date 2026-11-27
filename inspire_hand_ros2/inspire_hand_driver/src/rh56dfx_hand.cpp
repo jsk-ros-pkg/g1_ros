@@ -21,6 +21,17 @@ namespace
 constexpr uint8_t kRead = 0x11, kWrite = 0x12;
 constexpr uint16_t kPosition = 0x060a, kTarget = 0x05ce, kClear = 0x03ec, kCalibrate = 0x03f1;
 
+bool device_missing(int error)
+{
+  return error == ENOENT || error == ENODEV || error == ENXIO || error == EIO;
+}
+
+bool hung_up(int fd)
+{
+  pollfd event{fd, 0, 0};
+  return poll(&event, 1, 0) > 0 && (event.revents & (POLLERR | POLLHUP | POLLNVAL));
+}
+
 void transfer(int fd, uint8_t* buf, size_t size, bool writing, int timeout_ms)
 {
   const auto end = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeout_ms);
@@ -71,6 +82,10 @@ RH56DFXHand::RH56DFXHand(const std::string& device, int baudrate, int hand_id) :
     throw std::invalid_argument("baudrate must be 115200, 57600 or 19200");
   }
   fd_ = open(device.c_str(), O_RDWR | O_NOCTTY | O_NONBLOCK | O_CLOEXEC);
+  if (fd_ < 0 && device_missing(errno)) {
+    positions_.fill(1.0);
+    return;
+  }
   if (fd_ < 0)
     throw std::system_error(errno, std::generic_category(), device);
   try {
@@ -84,8 +99,14 @@ RH56DFXHand::RH56DFXHand(const std::string& device, int baudrate, int hand_id) :
       throw std::system_error(errno, std::generic_category(), device);
     maintenance(Operation::ClearError);
     positions_ = read_positions();
-  } catch (...) {
+  } catch (const std::exception&) {
+    const bool unplugged = hung_up(fd_);
     close(fd_);
+    fd_ = -1;
+    if (unplugged) {
+      positions_.fill(1.0);
+      return;
+    }
     throw;
   }
 }
@@ -93,7 +114,8 @@ RH56DFXHand::RH56DFXHand(const std::string& device, int baudrate, int hand_id) :
 RH56DFXHand::~RH56DFXHand()
 {
   stop();
-  close(fd_);
+  if (fd_ >= 0)
+    close(fd_);
 }
 
 void RH56DFXHand::send(uint8_t op, uint16_t address, const std::vector<uint8_t>& data)
@@ -196,9 +218,13 @@ void RH56DFXHand::add_action(const rclcpp::Node::SharedPtr& node, const std::str
 void RH56DFXHand::start(const rclcpp::Node::SharedPtr& node, const std::string& action_prefix)
 {
   logger_ = node->get_logger();
+  stopping_ = fd_ < 0;
   add_action(node, action_prefix + "clear_error", Operation::ClearError);
   add_action(node, action_prefix + "calibrate", Operation::Calibrate);
-  worker_ = std::thread(&RH56DFXHand::run, this);
+  if (!stopping_)
+    worker_ = std::thread(&RH56DFXHand::run, this);
+  else
+    RCLCPP_WARN(logger_, "Hand is not connected; commands are disabled until reactivation.");
 }
 
 void RH56DFXHand::stop(const Positions* final_target)
@@ -210,8 +236,15 @@ void RH56DFXHand::stop(const Positions* final_target)
   wake_.notify_one();
   if (worker_.joinable())
     worker_.join();
-  if (final_target)
-    send_positions(*final_target);
+  if (final_target && fd_ >= 0) {
+    try {
+      send_positions(*final_target);
+    } catch (const std::exception&) {
+      if (!hung_up(fd_))
+        throw;
+      RCLCPP_WARN(logger_, "Hand disconnected before the final position could be sent.");
+    }
+  }
 }
 
 RH56DFXHand::Positions RH56DFXHand::positions()
@@ -223,6 +256,8 @@ RH56DFXHand::Positions RH56DFXHand::positions()
 void RH56DFXHand::command(const Positions& target)
 {
   std::lock_guard lock(mutex_);
+  if (stopping_)
+    return;
   target_ = target;
   pending_ = true;
 }
@@ -267,6 +302,12 @@ void RH56DFXHand::run()
       RCLCPP_ERROR_THROTTLE(logger_, clock_, 2000, "%s", e.what());
     }
     lock.lock();
+    if (fd_ >= 0 && hung_up(fd_)) {
+      close(fd_);
+      fd_ = -1;
+      stopping_ = true;
+      RCLCPP_WARN(logger_, "Hand disconnected; commands are disabled until reactivation.");
+    }
     if (goal)
       busy_ = false;
     wake_.wait_for(lock, std::chrono::milliseconds(10), [this] { return stopping_ || goal_; });

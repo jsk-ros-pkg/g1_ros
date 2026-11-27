@@ -27,6 +27,12 @@ TF topics are scoped to the hand namespace so that two hands can use the same fr
 
 Use `side:=left` for the left-hand kinematic frames. Both sides use the same six joint names. To run two standalone hands, launch each with its own `device` and `namespace` (default `inspire_hand`). The driver clears errors once on activation and starts from measured joint positions. To leave the hand in its last pose on shutdown, set `close_hand_on_deactivate:=false`.
 
+An unplugged USB serial device does not stop the controllers or the other hand.
+The disconnected hand ignores commands and rejects maintenance goals. Its joint
+states retain the last measurement (the open pose if it was absent at startup).
+After reconnecting USB, stop any active trajectory and reactivate the hand hardware
+or relaunch to resume communication.
+
 To open the hand over two seconds and read its measured positions:
 
 ```bash
@@ -43,7 +49,12 @@ ros2 topic echo --once /inspire_hand/joint_states
 
 ## Hand maintenance
 
-If a joint stops moving in response to commands, stop the current trajectory and clear the hand's errors. Set `hand` to the affected driver's namespace.
+If a joint stops responding to commands, first check the communication light on the affected hand's USB adapter.
+
+1. If the light does not show normal activity, stop the current trajectory, make sure the USB adapter is firmly plugged in, and restart the launch.
+2. If the light still does not show normal activity, stop the launch, unplug and reconnect the USB adapter, then start the launch again and recheck the light.
+
+If the light shows normal activity but the joint still does not move, stop the current trajectory and clear the hand's errors. Set `hand` to the affected driver's namespace.
 
 ```bash
 hand=/inspire_hand
