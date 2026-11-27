@@ -37,12 +37,22 @@ ros2 action send_goal /inspire_hand/position_joint_trajectory_controller/follow_
 ros2 topic echo --once /inspire_hand/joint_states
 ```
 
-Stop trajectories and leave the fingers unloaded and free to move when calibrating the force sensors. The calibration action waits for the completion frame.
+## Hand maintenance
+
+If a joint stops moving in response to commands, stop the current trajectory and clear the hand's errors. Set `hand` to the affected driver's namespace.
 
 ```bash
-ros2 action send_goal /inspire_hand/clear_error inspire_hand_interfaces/action/HandMaintenance '{}'
-ros2 action send_goal /inspire_hand/calibrate inspire_hand_interfaces/action/HandMaintenance '{}'
+hand=/inspire_hand
+ros2 action send_goal "$hand/clear_error" inspire_hand_interfaces/action/HandMaintenance '{}'
 ```
+
+Retry the motion. If the joint still does not respond, stop trajectories again and calibrate the force sensors. The fingers move during calibration. Remove any grasped object and keep all fingers unloaded and clear of contact throughout the operation.
+
+```bash
+ros2 action send_goal "$hand/calibrate" inspire_hand_interfaces/action/HandMaintenance '{}'
+```
+
+Wait for the action to report success before retrying the motion.
 
 ## Serial settings
 

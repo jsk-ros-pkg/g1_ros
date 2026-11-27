@@ -46,7 +46,7 @@ By default, the driver communicates directly with the hands over USB serial. Run
 
 For a hand with custom serial settings, add e.g. `inspire_right_baudrate:=57600 inspire_right_hand_id:=2` (use `inspire_left_baudrate` and `inspire_left_hand_id` for the left hand).
 
-G1 trajectories use `/right_hand_controller/follow_joint_trajectory` and `/left_hand_controller/follow_joint_trajectory`. The maintenance actions use `inspire_hand_interfaces/action/HandMaintenance` under `/right_hand` and `/left_hand`.
+If a hand joint stops responding to motion commands during direct serial control, follow the [hand maintenance procedure](inspire_hand_ros2/README.md#hand-maintenance). Use `/right_hand` or `/left_hand` for the affected hand.
 
 The hands close on deactivation by default. Add `close_hand_on_deactivate:=false` to disable this behavior.
 
