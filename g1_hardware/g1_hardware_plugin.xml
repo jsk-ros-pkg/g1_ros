@@ -6,12 +6,6 @@
       Communicates via DDS (rt/arm_sdk LowCmd_, rt/lowstate LowState_).
     </description>
   </class>
-  <class name="g1_hardware/InspireRH56DFXHardwareInterface" type="g1_hardware::InspireRH56DFXHardwareInterface" base_class_type="hardware_interface::SystemInterface">
-    <description>
-      ros2_control hardware interface for Inspire Robots RH56DFX hands.
-      Communicates directly with the left and right serial devices.
-    </description>
-  </class>
   <class name="g1_hardware/InspireRH56DFXDDSHardwareInterface" type="g1_hardware::InspireRH56DFXDDSHardwareInterface" base_class_type="hardware_interface::SystemInterface">
     <description>RH56DFX hands via the external inspire_g1 DDS bridge.</description>
   </class>

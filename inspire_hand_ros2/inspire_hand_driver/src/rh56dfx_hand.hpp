@@ -7,11 +7,11 @@
 #include <string>
 #include <thread>
 
-#include <g1_hand_interfaces/action/hand_maintenance.hpp>
+#include <inspire_hand_interfaces/action/hand_maintenance.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp_action/rclcpp_action.hpp>
 
-namespace g1_hardware
+namespace inspire_hand_driver
 {
 
 // One worker owns the request/reply stream for one physical hand.
@@ -21,13 +21,13 @@ public:
   using Positions = std::array<double, 6>;
   explicit RH56DFXHand(const std::string& device);
   ~RH56DFXHand();
-  void start(const rclcpp::Node::SharedPtr& node, const std::string& side);
+  void start(const rclcpp::Node::SharedPtr& node, const std::string& action_prefix);
   Positions positions();
   void command(const Positions& target);
   void stop(const Positions* final_target = nullptr);
 
 private:
-  using Action = g1_hand_interfaces::action::HandMaintenance;
+  using Action = inspire_hand_interfaces::action::HandMaintenance;
   using Goal = rclcpp_action::ServerGoalHandle<Action>;
   enum class Operation
   {
@@ -55,4 +55,4 @@ private:
   std::thread worker_;
 };
 
-} // namespace g1_hardware
+} // namespace inspire_hand_driver

@@ -1,0 +1,20 @@
+/**/controller_manager:
+  ros__parameters:
+    update_rate: 100
+    joint_state_broadcaster:
+      type: joint_state_broadcaster/JointStateBroadcaster
+    position_joint_trajectory_controller:
+      type: joint_trajectory_controller/JointTrajectoryController
+
+/**/position_joint_trajectory_controller:
+  ros__parameters:
+    joints:
+      - pinky_proximal_joint
+      - ring_proximal_joint
+      - middle_proximal_joint
+      - index_proximal_joint
+      - thumb_proximal_pitch_joint
+      - thumb_proximal_yaw_joint
+    command_interfaces: [position]
+    state_interfaces: [position, velocity]
+    interpolate_from_desired_state: true

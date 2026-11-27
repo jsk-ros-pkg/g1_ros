@@ -14,7 +14,7 @@
 #include <stdexcept>
 #include <system_error>
 
-namespace g1_hardware
+namespace inspire_hand_driver
 {
 namespace
 {
@@ -177,11 +177,11 @@ void RH56DFXHand::add_action(const rclcpp::Node::SharedPtr& node, const std::str
       }));
 }
 
-void RH56DFXHand::start(const rclcpp::Node::SharedPtr& node, const std::string& side)
+void RH56DFXHand::start(const rclcpp::Node::SharedPtr& node, const std::string& action_prefix)
 {
-  logger_ = node->get_logger().get_child(side);
-  add_action(node, side + "_hand/clear_error", Operation::ClearError);
-  add_action(node, side + "_hand/calibrate", Operation::Calibrate);
+  logger_ = node->get_logger();
+  add_action(node, action_prefix + "clear_error", Operation::ClearError);
+  add_action(node, action_prefix + "calibrate", Operation::Calibrate);
   worker_ = std::thread(&RH56DFXHand::run, this);
 }
 
@@ -257,4 +257,4 @@ void RH56DFXHand::run()
   }
 }
 
-} // namespace g1_hardware
+} // namespace inspire_hand_driver

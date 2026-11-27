@@ -37,10 +37,8 @@
 #include <string>
 #include <vector>
 
-namespace g1_hardware
+namespace inspire_hand_driver
 {
-
-class RH56DFXHand;
 
 class RH56DFXHardwareBase : public hardware_interface::SystemInterface
 {
@@ -77,13 +75,17 @@ public:
   };
 
 protected:
-  using Positions = std::array<std::array<double, 6>, 2>;
+  explicit RH56DFXHardwareBase(size_t motor_count) : motor_count_(motor_count) {}
+
+  using Positions = std::vector<double>;
   virtual void connect() = 0;
-  virtual Positions positions() = 0;
+  virtual void read_positions(Positions& state) = 0;
   virtual void command(const Positions& target) = 0;
   virtual void disconnect(const Positions* final_target) = 0;
 
 private:
+  size_t motor_count_;
+  Positions motor_positions_, motor_targets_;
   bool close_hand_on_deactivate_{true};
 
   std::vector<JointConfig> joint_configs_;
@@ -94,14 +96,4 @@ private:
   int active_command_interfaces_{0};
 };
 
-class InspireRH56DFXHardwareInterface : public RH56DFXHardwareBase
-{
-private:
-  void connect() override;
-  Positions positions() override;
-  void command(const Positions& target) override;
-  void disconnect(const Positions* final_target) override;
-  std::array<std::shared_ptr<RH56DFXHand>, 2> hands_;
-};
-
-} // namespace g1_hardware
+} // namespace inspire_hand_driver

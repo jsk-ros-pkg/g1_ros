@@ -1,4 +1,4 @@
-#include "g1_hardware/inspire_rh56dfx_hardware_interface.hpp"
+#include "inspire_hand_driver/rh56dfx_hardware.hpp"
 
 #include <chrono>
 #include <cmath>
@@ -16,14 +16,18 @@
 
 namespace g1_hardware
 {
-class InspireRH56DFXDDSHardwareInterface : public RH56DFXHardwareBase
+class InspireRH56DFXDDSHardwareInterface : public inspire_hand_driver::RH56DFXHardwareBase
 {
+public:
+  InspireRH56DFXDDSHardwareInterface() : RH56DFXHardwareBase(12) {}
+
+private:
   using MotorStates = unitree_go::msg::dds_::MotorStates_;
   using MotorCmds = unitree_go::msg::dds_::MotorCmds_;
 
   struct State
   {
-    Positions positions{};
+    Positions positions = Positions(12);
     std::mutex mutex;
     std::condition_variable ready;
     bool received{false};
@@ -54,10 +58,8 @@ class InspireRH56DFXDDSHardwareInterface : public RH56DFXHardwareBase
           if (motors.size() < 12)
             return;
           std::lock_guard lock(state->mutex);
-          size_t index = 0;
-          for (auto& hand : state->positions)
-            for (auto& q : hand)
-              q = motors[index++].q();
+          for (size_t i = 0; i < state->positions.size(); ++i)
+            state->positions[i] = motors[i].q();
           if (!state->received) {
             state->received = true;
             state->ready.notify_one();
@@ -71,20 +73,18 @@ class InspireRH56DFXDDSHardwareInterface : public RH56DFXHardwareBase
                                ". Is inspire_g1 running?");
   }
 
-  Positions positions() override
+  void read_positions(Positions& state) override
   {
     if (!state_)
-      return {};
+      return;
     std::lock_guard lock(state_->mutex);
-    return state_->positions;
+    state = state_->positions;
   }
 
   void command(const Positions& target) override
   {
-    size_t index = 0;
-    for (const auto& hand : target)
-      for (const auto q : hand)
-        message_.cmds()[index++].q(static_cast<float>(q));
+    for (size_t i = 0; i < target.size(); ++i)
+      message_.cmds()[i].q(static_cast<float>(target[i]));
     publisher_->Write(message_);
   }
 
