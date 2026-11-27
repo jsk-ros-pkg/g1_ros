@@ -21,6 +21,10 @@ Stop any process using the port, give the launch user read/write access, then ru
 ros2 launch inspire_hand_driver rh56dfx.launch.py device:=/dev/ttyUSB0 side:=right
 ```
 
+Add `use_rviz:=true` to view the selected hand and its measured motion in RViz.
+The standalone model comes from [inspire_hand_description](inspire_hand_description/NOTICE.md).
+TF topics are scoped to the hand namespace so that two hands can use the same frame names.
+
 Use `side:=left` for the left-hand kinematic frames. Both sides use the same six joint names. To run two standalone hands, launch each with its own `device` and `namespace` (default `inspire_hand`). The driver clears errors once on activation and starts from measured joint positions. To leave the hand in its last pose on shutdown, set `close_hand_on_deactivate:=false`.
 
 To open the hand over two seconds and read its measured positions:

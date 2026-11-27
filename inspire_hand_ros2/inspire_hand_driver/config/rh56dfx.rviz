@@ -1,0 +1,27 @@
+Panels:
+  - Class: rviz_common/Displays
+    Name: Displays
+Visualization Manager:
+  Global Options:
+    Fixed Frame: hand_base_link
+    Background Color: 55; 55; 55
+  Displays:
+    - Class: rviz_default_plugins/RobotModel
+      Name: RH56DFX
+      Enabled: true
+      Description Source: Topic
+      Description Topic:
+        Value: robot_description
+        Durability Policy: Transient Local
+        Reliability Policy: Reliable
+      Visual Enabled: true
+  Views:
+    Current:
+      Class: rviz_default_plugins/Orbit
+      Distance: 0.36
+      Focal Point:
+        X: 0
+        Y: -0.1
+        Z: 0
+      Pitch: 0.32
+      Yaw: 0.25

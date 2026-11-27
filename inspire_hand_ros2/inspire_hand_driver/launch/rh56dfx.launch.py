@@ -5,6 +5,7 @@ from pathlib import Path
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, OpaqueFunction
+from launch.conditions import IfCondition
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 import xacro
@@ -28,12 +29,22 @@ def _setup(context):
         str(share / "urdf/rh56dfx.urdf.xacro"), mappings=mappings
     ).toxml()
     controllers = str(share / "config/controllers.yaml")
+    tf_topics = [("/tf", "tf"), ("/tf_static", "tf_static")]
     return [
         Node(
             package="robot_state_publisher",
             executable="robot_state_publisher",
             namespace=namespace,
             parameters=[{"robot_description": description}],
+            remappings=tf_topics,
+        ),
+        Node(
+            package="rviz2",
+            executable="rviz2",
+            namespace=namespace,
+            arguments=["-d", str(share / "config/rh56dfx.rviz")],
+            remappings=tf_topics,
+            condition=IfCondition(LaunchConfiguration("use_rviz")),
         ),
         Node(
             package="controller_manager",
@@ -67,6 +78,9 @@ def generate_launch_description():
                 "hand_id", default_value="1", description="Serial device ID (1-254)"
             ),
             DeclareLaunchArgument("namespace", default_value="inspire_hand"),
+            DeclareLaunchArgument(
+                "use_rviz", default_value="false", choices=["true", "false"]
+            ),
             DeclareLaunchArgument(
                 "side", default_value="right", choices=["right", "left"]
             ),
