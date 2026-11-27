@@ -131,7 +131,7 @@ namespace g1_hardware
  *   cmd_vel_timeout (double, default 0.5 s) — cmd_vel zeroed if no message within this window
  *   pose_timeout    (double, default 0.0 s) — <= 0 holds the last pose targets;
  *                   > 0 releases VR tracking if no pose arrives within this window
- *   return_to_default_pose_duration (double, default 5.0 s) — read on each request;
+ *   return_to_default_pose_duration (double, default 2.0 s) — read on each request;
  *                   must be finite and positive
  *   left_wrist_compliance  (double, default 0.0)
  *   right_wrist_compliance (double, default 0.0)

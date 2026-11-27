@@ -71,7 +71,7 @@ GearSonicInterface::GearSonicInterface(const rclcpp::NodeOptions& options)
   const double publish_rate = declare_parameter("publish_rate", 50.0);
   cmd_vel_timeout_ = declare_parameter("cmd_vel_timeout", 0.5);
   pose_timeout_ = declare_parameter("pose_timeout", 0.0);
-  declare_parameter("return_to_default_pose_duration", 5.0);
+  declare_parameter("return_to_default_pose_duration", 2.0);
   smpl_window_size_ = static_cast<size_t>(declare_parameter("smpl_window_size", 5));
   apply_body_offset_ = declare_parameter("apply_vr_3point_body_offset", true);
   // End-effector tracking compliance per keypoint, each 0.0-1.0; 0 = stiff.
