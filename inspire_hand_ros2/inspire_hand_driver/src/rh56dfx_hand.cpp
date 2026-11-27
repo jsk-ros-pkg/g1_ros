@@ -13,6 +13,7 @@
 #include <numeric>
 #include <stdexcept>
 #include <system_error>
+#include <utility>
 
 namespace inspire_hand_driver
 {
@@ -20,6 +21,11 @@ namespace
 {
 constexpr uint8_t kRead = 0x11, kWrite = 0x12;
 constexpr uint16_t kPosition = 0x060a, kTarget = 0x05ce, kClear = 0x03ec, kCalibrate = 0x03f1;
+constexpr uint16_t kForceSet = 0x05da, kForceAct = 0x062e;
+constexpr double kNewtonPerGramForce = 0.00980665;
+constexpr std::array<const char*, 6> kChannels{"pinky", "ring",  "middle",
+                                               "index", "thumb", "thumb_rotation"};
+constexpr size_t kThumbRotation = 5;
 
 bool device_missing(int error)
 {
@@ -182,16 +188,51 @@ void RH56DFXHand::maintenance(Operation op)
     throw std::runtime_error("Force sensor calibration failed");
 }
 
-void RH56DFXHand::add_action(const rclcpp::Node::SharedPtr& node, const std::string& name,
-                             Operation op)
+void RH56DFXHand::set_force(const SetForce::Goal& goal)
 {
+  std::vector<uint8_t> data;
+  for (double force : goal.thresholds) {
+    const auto raw = static_cast<uint16_t>(std::lround(force / kNewtonPerGramForce));
+    data.push_back(raw & 255);
+    data.push_back(raw >> 8);
+  }
+  send(kWrite, kForceSet, data);
+  reply(kWrite, kForceSet, 1);
+}
+
+void RH56DFXHand::publish_forces()
+{
+  send(kRead, kForceAct, {12});
+  const auto frame = reply(kRead, kForceAct, 12);
+  auto newtons = [&frame](size_t i) {
+    const int raw = frame[7 + 2 * i] | (frame[8 + 2 * i] << 8);
+    return (raw >= 0x8000 ? raw - 0x10000 : raw) * kNewtonPerGramForce;
+  };
+  Wrench msg;
+  msg.header.stamp = ros_clock_->now();
+  for (size_t i = 0; i < wrench_pubs_.size(); ++i) {
+    msg.header.frame_id = wrench_frames_[i];
+    const double force = newtons(i);
+    msg.wrench.force.z = i == kThumbRotation ? 0.0 : force;
+    msg.wrench.force.x = i == kThumbRotation ? force : 0.0;
+    wrench_pubs_[i]->publish(msg);
+  }
+}
+
+template <typename A, typename Validate, typename Execute>
+typename rclcpp_action::Server<A>::SharedPtr
+RH56DFXHand::add_action(const rclcpp::Node::SharedPtr& node, const std::string& name,
+                        Validate validate, Execute execute)
+{
+  using Goal = rclcpp_action::ServerGoalHandle<A>;
   std::weak_ptr<RH56DFXHand> weak = shared_from_this();
-  servers_.push_back(rclcpp_action::create_server<Action>(
+  return rclcpp_action::create_server<A>(
       node, name,
-      [weak](const rclcpp_action::GoalUUID&, std::shared_ptr<const Action::Goal>) {
+      [weak, validate](const rclcpp_action::GoalUUID&,
+                       std::shared_ptr<const typename A::Goal> goal) {
         if (auto self = weak.lock()) {
           std::lock_guard lock(self->mutex_);
-          if (!self->busy_ && !self->stopping_) {
+          if (!self->busy_ && !self->stopping_ && validate(*goal)) {
             self->busy_ = true;
             return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
           }
@@ -199,28 +240,59 @@ void RH56DFXHand::add_action(const rclcpp::Node::SharedPtr& node, const std::str
         return rclcpp_action::GoalResponse::REJECT;
       },
       [](std::shared_ptr<Goal>) { return rclcpp_action::CancelResponse::REJECT; },
-      [weak, op](std::shared_ptr<Goal> goal) {
+      [weak, execute](std::shared_ptr<Goal> goal) {
         if (auto self = weak.lock()) {
           std::lock_guard lock(self->mutex_);
           if (!self->stopping_) {
-            self->goal_ = goal;
-            self->operation_ = op;
+            self->request_ = [goal, execute](bool stopping) {
+              auto result = std::make_shared<typename A::Result>();
+              try {
+                if (stopping)
+                  throw std::runtime_error("Hand deactivated");
+                execute(*goal->get_goal());
+              } catch (const std::exception& e) {
+                result->message = e.what();
+                goal->abort(result);
+                return;
+              }
+              result->message = "Completed";
+              goal->succeed(result);
+            };
             self->wake_.notify_one();
             return;
           }
         }
-        auto result = std::make_shared<Action::Result>();
+        auto result = std::make_shared<typename A::Result>();
         result->message = "Hand deactivated";
         goal->abort(result);
-      }));
+      });
 }
 
-void RH56DFXHand::start(const rclcpp::Node::SharedPtr& node, const std::string& action_prefix)
+void RH56DFXHand::start(const rclcpp::Node::SharedPtr& node, const std::string& action_prefix,
+                        const std::string& frame_prefix)
 {
   logger_ = node->get_logger();
   stopping_ = fd_ < 0;
-  add_action(node, action_prefix + "clear_error", Operation::ClearError);
-  add_action(node, action_prefix + "calibrate", Operation::Calibrate);
+  ros_clock_ = node->get_clock();
+  for (size_t i = 0; i < wrench_pubs_.size(); ++i) {
+    wrench_frames_[i] = frame_prefix + (i == kThumbRotation ? "thumb" : kChannels[i]) + "_pad";
+    wrench_pubs_[i] = node->create_publisher<Wrench>(action_prefix + kChannels[i] + "/wrench",
+                                                     rclcpp::SensorDataQoS());
+  }
+  auto valid = [](const Action::Goal&) { return true; };
+  servers_.push_back(
+      add_action<Action>(node, action_prefix + "clear_error", valid,
+                         [this](const Action::Goal&) { maintenance(Operation::ClearError); }));
+  servers_.push_back(
+      add_action<Action>(node, action_prefix + "calibrate", valid,
+                         [this](const Action::Goal&) { maintenance(Operation::Calibrate); }));
+  force_server_ = add_action<SetForce>(
+      node, action_prefix + "set_force",
+      [](const SetForce::Goal& g) {
+        return std::all_of(g.thresholds.begin(), g.thresholds.end(),
+                           [](double f) { return std::isfinite(f) && f >= 0 && f <= 9.80665; });
+      },
+      [this](const SetForce::Goal& g) { set_force(g); });
   if (!stopping_)
     worker_ = std::thread(&RH56DFXHand::run, this);
   else
@@ -266,37 +338,25 @@ void RH56DFXHand::run()
 {
   std::unique_lock lock(mutex_);
   while (true) {
-    auto goal = std::move(goal_);
+    auto request = std::exchange(request_, {});
     const bool stopping = stopping_;
-    if (stopping && !goal)
+    if (stopping && !request)
       break;
-    const auto op = operation_;
     const auto target = target_;
-    const bool write_target = pending_;
-    pending_ = false;
+    const bool write_target = !request && std::exchange(pending_, false);
     lock.unlock();
     try {
-      if (goal) {
-        auto result = std::make_shared<Action::Result>();
-        try {
-          if (stopping)
-            throw std::runtime_error("Hand deactivated");
-          maintenance(op);
-        } catch (const std::exception& e) {
-          result->message = e.what();
-        }
-        if (result->message.empty()) {
-          result->message = "Completed";
-          goal->succeed(result);
-        } else {
-          goal->abort(result);
-        }
-      } else {
+      if (request)
+        request(stopping);
+      if (!stopping) {
         if (write_target)
           send_positions(target);
         auto sample = read_positions();
-        std::lock_guard guard(mutex_);
-        positions_ = sample;
+        {
+          std::lock_guard guard(mutex_);
+          positions_ = sample;
+        }
+        publish_forces();
       }
     } catch (const std::exception& e) {
       RCLCPP_ERROR_THROTTLE(logger_, clock_, 2000, "%s", e.what());
@@ -308,9 +368,9 @@ void RH56DFXHand::run()
       stopping_ = true;
       RCLCPP_WARN(logger_, "Hand disconnected; commands are disabled until reactivation.");
     }
-    if (goal)
+    if (request)
       busy_ = false;
-    wake_.wait_for(lock, std::chrono::milliseconds(10), [this] { return stopping_ || goal_; });
+    wake_.wait_for(lock, std::chrono::milliseconds(10), [this] { return stopping_ || request_; });
   }
 }
 

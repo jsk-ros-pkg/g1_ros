@@ -1,0 +1,29 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+  <xacro:macro name="rh56dfx_pad" params="prefix finger parent xyz rpy">
+    <link name="${prefix}${finger}_pad"/>
+    <joint name="${prefix}${finger}_pad_joint" type="fixed">
+      <parent link="${prefix}${finger}_${parent}"/>
+      <child link="${prefix}${finger}_pad"/>
+      <origin xyz="${xyz}" rpy="${rpy}"/>
+    </joint>
+  </xacro:macro>
+  <!-- Origins are triangle centroids near the distal pad center of each DFQ mesh.
+       +Z is the outward triangle normal; +X is link +Z projected onto its plane. -->
+  <xacro:macro name="rh56dfx_pads" params="prefix side">
+    <xacro:if value="${side == 'left'}">
+      <xacro:rh56dfx_pad prefix="${prefix}" finger="thumb" parent="distal" xyz="0.013906 -0.015263 -0.005301" rpy="-0.000000 -1.535918 1.317791"/>
+      <xacro:rh56dfx_pad prefix="${prefix}" finger="index" parent="intermediate" xyz="-0.005455 -0.035203 -0.004997" rpy="0.000000 -1.544233 -0.016960"/>
+      <xacro:rh56dfx_pad prefix="${prefix}" finger="middle" parent="intermediate" xyz="-0.006027 -0.037369 -0.005377" rpy="3.141593 -1.511782 3.093824"/>
+      <xacro:rh56dfx_pad prefix="${prefix}" finger="ring" parent="intermediate" xyz="-0.005455 -0.035203 -0.004997" rpy="-0.000000 -1.544233 -0.016960"/>
+      <xacro:rh56dfx_pad prefix="${prefix}" finger="pinky" parent="intermediate" xyz="-0.004525 -0.028953 -0.005003" rpy="3.141593 -1.545706 3.075327"/>
+    </xacro:if>
+    <xacro:if value="${side == 'right'}">
+      <xacro:rh56dfx_pad prefix="${prefix}" finger="thumb" parent="distal" xyz="0.013906 0.015263 -0.006699" rpy="-3.141593 -1.535918 1.823806"/>
+      <xacro:rh56dfx_pad prefix="${prefix}" finger="index" parent="intermediate" xyz="-0.005825 0.035160 -0.004997" rpy="3.141593 -1.454645 -3.114133"/>
+      <xacro:rh56dfx_pad prefix="${prefix}" finger="middle" parent="intermediate" xyz="-0.006027 0.037369 -0.005377" rpy="-3.141593 -1.511782 -3.093824"/>
+      <xacro:rh56dfx_pad prefix="${prefix}" finger="ring" parent="intermediate" xyz="-0.005456 0.035220 -0.004997" rpy="-3.141593 -1.454645 -3.124633"/>
+      <xacro:rh56dfx_pad prefix="${prefix}" finger="pinky" parent="intermediate" xyz="-0.004506 0.028996 -0.004661" rpy="0.000000 -1.518981 0.063019"/>
+    </xacro:if>
+  </xacro:macro>
+</robot>

@@ -272,7 +272,8 @@ private:
     std::string action_prefix = prefix == params.end() ? "" : prefix->second;
     if (!action_prefix.empty() && action_prefix.back() != '/')
       action_prefix += '/';
-    hand_->start(get_node(), action_prefix);
+    const auto frames = params.find("frame_prefix");
+    hand_->start(get_node(), action_prefix, frames == params.end() ? "" : frames->second);
   }
 
   void read_positions(Positions& state) override

@@ -4,7 +4,7 @@
   <xacro:macro name="inspire_rh56dfx_ros2_control" params="name network_interface transport command_topic state_topic state_timeout_sec right_device left_device right_baudrate:=115200 right_hand_id:=1 left_baudrate:=115200 left_hand_id:=1 close_hand_on_deactivate:=true">
     <xacro:if value="${transport == 'serial'}">
       <xacro:rh56dfx_serial_system name="RightRH56DFX" prefix="R_" device="${right_device}" baudrate="${right_baudrate}" hand_id="${right_hand_id}" action_prefix="right_hand" close_hand_on_deactivate="${close_hand_on_deactivate}"/>
-      <xacro:rh56dfx_serial_system name="LeftRH56DFX" prefix="L_" device="${left_device}" baudrate="${left_baudrate}" hand_id="${left_hand_id}" action_prefix="left_hand" close_hand_on_deactivate="${close_hand_on_deactivate}"/>
+      <xacro:rh56dfx_serial_system name="LeftRH56DFX" side="left" prefix="L_" device="${left_device}" baudrate="${left_baudrate}" hand_id="${left_hand_id}" action_prefix="left_hand" close_hand_on_deactivate="${close_hand_on_deactivate}"/>
     </xacro:if>
     <xacro:if value="${transport == 'dds'}">
       <ros2_control name="${name}" type="system">

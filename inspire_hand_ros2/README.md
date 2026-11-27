@@ -47,6 +47,36 @@ ros2 action send_goal /inspire_hand/position_joint_trajectory_controller/follow_
 ros2 topic echo --once /inspire_hand/joint_states
 ```
 
+## Fingertip forces (direct serial only)
+
+Use the hand's `set_force` action to change the closing force thresholds without
+sending a trajectory. The six values are in newtons (0 to 9.80665 N), in order:
+pinky, ring, middle, index, thumb bend, thumb rotation. A successful result means
+the hand acknowledged the write, not that it reached the specified force.
+
+```bash
+hand=/inspire_hand  # On G1: /left_hand or /right_hand
+ros2 action send_goal "$hand/set_force" inspire_hand_interfaces/action/SetForce \
+  '{thresholds: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0]}'
+ros2 topic echo "$hand/index/wrench" --qos-reliability best_effort
+```
+
+Each successful serial sampling cycle publishes six `geometry_msgs/msg/WrenchStamped`
+samples with the same timestamp on `$hand/{pinky,ring,middle,index,thumb,thumb_rotation}/wrench`.
+Each finger has a fixed `<finger>_pad` frame on the contact side of its distal mesh
+(`L_` or `R_` prefix on G1). Positive bending force is represented along the
+outward pad normal (+Z), including thumb bending on `thumb/wrench`. The separate
+`thumb_rotation/wrench` uses the transverse tangent (+X) of the same thumb pad
+by convention; it is not a measured direction
+or torque. All other components are zero, not independently measured. No stale
+wrenches are published while disconnected or waiting for calibration.
+
+The [RH56 manual](https://en.inspire-robots.com/wp-content/uploads/2023/11/INSPIRE-ROBOTS-THE-DEXTEROUS-HAND-RH56-SERIES-USER-MANUAL.pdf)
+describes these values as fingertip gripping forces. They are **estimates**, not
+calibrated contact forces or guaranteed maximum loads. Contact location and closing
+speed matter; actual force can overshoot the threshold. See [Tan et al., RH56DFX
+force characterization](https://arxiv.org/abs/2603.08988).
+
 ## Hand maintenance
 
 If a joint stops responding to commands, first check the communication light on the affected hand's USB adapter.
