@@ -29,10 +29,12 @@
 #pragma once
 
 #include <array>
+#include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <deque>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -63,6 +65,13 @@ namespace g1_hardware
  *               Also resets heading and starts the timer.
  *       false → stop sending planner messages only (no stop=1 command).
  *               Deploy reverts to IDLE after its 1-second planner timeout; robot stays balanced.
+ *
+ *   ~/return_to_default_pose (std_srvs/Trigger)
+ *       Start a smooth return from the last commanded targets to SONIC's default
+ *       standing targets and height. Requires enabled, stationary planner control
+ *       in default or idle_squat mode. The response acknowledges startup, not arrival.
+ *       New commands cancel the return; stop target publishers (including MoveIt) first.
+ *       The final targets remain held, including with a positive pose_timeout.
  *
  *   ~/mode/default    (std_srvs/Trigger) — auto-select gait from cmd_vel magnitude (default)
  *       mag < 0.05       → IDLE
@@ -103,10 +112,9 @@ namespace g1_hardware
  *         right wrist: pos + R(q) * ( 0.18, +0.025, 0.0 )
  *         torso/head:  pos + R(q) * ( 0.0,   0.0,   0.35 )
  *       Set the parameter to false to send raw keypoint targets yourself.
- *       If no pose message arrives within pose_timeout, vr fields are dropped
- *       from planner messages (deploy releases VR tracking and reverts to the
- *       planner reference motion) — same semantics as pico_manager when the
- *       VR stream stops.
+ *       The last targets are held by default when pose messages stop.
+ *       A positive pose_timeout releases VR tracking after that interval and
+ *       returns to the planner reference motion.
  *
  * ── Coordinate frame for PoseStamped positions ────────────────────────────
  *   Positions must be in the G1's "pelvis" TF frame (URDF root link).
@@ -121,8 +129,10 @@ namespace g1_hardware
  *   zmq_port        (int,    default 5556)
  *   publish_rate    (double, default 50.0 Hz)
  *   cmd_vel_timeout (double, default 0.5 s) — cmd_vel zeroed if no message within this window
- *   pose_timeout    (double, default 0.5 s) — vr fields dropped from planner messages if no
- *                   pose target arrives within this window (<= 0 keeps the last targets forever)
+ *   pose_timeout    (double, default 0.0 s) — <= 0 holds the last pose targets;
+ *                   > 0 releases VR tracking if no pose arrives within this window
+ *   return_to_default_pose_duration (double, default 2.0 s) — read on each request;
+ *                   must be finite and positive
  *   left_wrist_compliance  (double, default 0.0)
  *   right_wrist_compliance (double, default 0.0)
  *   head_compliance        (double, default 0.0)
@@ -147,6 +157,10 @@ public:
 private:
   void OnEnableControl(std_srvs::srv::SetBool::Request::SharedPtr req,
                        std_srvs::srv::SetBool::Response::SharedPtr res);
+  void OnReturnToDefaultPose(std_srvs::srv::Trigger::Response::SharedPtr res);
+  // Called with data_mutex_ held.
+  void CancelDefaultPoseReturn(const char* reason);
+  void UpdateDefaultPoseReturn();
   void OnCmdVel(geometry_msgs::msg::Twist::ConstSharedPtr msg);
   void OnLeftWrist(geometry_msgs::msg::PoseStamped::ConstSharedPtr msg);
   void OnRightWrist(geometry_msgs::msg::PoseStamped::ConstSharedPtr msg);
@@ -189,6 +203,7 @@ private:
   static std::vector<uint8_t> BuildPoseMessage(const std::deque<SmplFrame>& frames);
 
   rclcpp::Service<std_srvs::srv::SetBool>::SharedPtr enable_control_srv_;
+  rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr return_to_default_pose_srv_;
   // One Trigger service per LocomotionMode (indexed by mode value 0–19)
   std::vector<rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr> mode_services_;
 
@@ -245,7 +260,23 @@ private:
   bool apply_body_offset_{true};                         // set from parameter in ctor
   bool any_pose_received_{false};                   // true once at least one pose topic arrives
   rclcpp::Time last_pose_time_{0, 0, RCL_ROS_TIME}; // last pose target receive time
-  double pose_timeout_{0.5}; // seconds; vr fields dropped if no pose within this window
+  double pose_timeout_{0.0}; // seconds; <= 0 holds targets, > 0 releases stale targets
+
+  // SONIC PlannerConfig::default_height. Interpolate numeric heights, not the -1 sentinel.
+  static constexpr double kDefaultStandingHeight = 0.788740;
+
+  struct DefaultPoseReturn
+  {
+    std::array<float, 9> position;
+    std::array<float, 12> orientation;
+    double height;
+    double duration;
+    std::chrono::steady_clock::time_point start;
+    bool completed{false};
+  };
+
+  // Keep the completed state until a new command to suppress pose_timeout.
+  std::optional<DefaultPoseReturn> default_pose_return_;
 
   // Graceful arm-lowering ramp duration in the destructor (fixed, not a parameter).
   // Gantry-suspended use is assumed; the robot goes limp after the socket closes.

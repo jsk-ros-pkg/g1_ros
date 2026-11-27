@@ -70,7 +70,8 @@ GearSonicInterface::GearSonicInterface(const rclcpp::NodeOptions& options)
   const int zmq_port = declare_parameter("zmq_port", 5556);
   const double publish_rate = declare_parameter("publish_rate", 50.0);
   cmd_vel_timeout_ = declare_parameter("cmd_vel_timeout", 0.5);
-  pose_timeout_ = declare_parameter("pose_timeout", 0.5);
+  pose_timeout_ = declare_parameter("pose_timeout", 0.0);
+  declare_parameter("return_to_default_pose_duration", 2.0);
   smpl_window_size_ = static_cast<size_t>(declare_parameter("smpl_window_size", 5));
   apply_body_offset_ = declare_parameter("apply_vr_3point_body_offset", true);
   // End-effector tracking compliance per keypoint, each 0.0-1.0; 0 = stiff.
@@ -113,11 +114,17 @@ GearSonicInterface::GearSonicInterface(const rclcpp::NodeOptions& options)
       [this](std_srvs::srv::SetBool::Request::SharedPtr req,
              std_srvs::srv::SetBool::Response::SharedPtr res) { OnEnableControl(req, res); });
 
+  return_to_default_pose_srv_ = create_service<std_srvs::srv::Trigger>(
+      "~/return_to_default_pose",
+      [this](std_srvs::srv::Trigger::Request::SharedPtr,
+             std_srvs::srv::Trigger::Response::SharedPtr res) { OnReturnToDefaultPose(res); });
+
   // ~/mode/default: auto-select IDLE/SLOW_WALK/WALK/RUN from cmd_vel magnitude
   mode_services_.push_back(create_service<std_srvs::srv::Trigger>(
       "~/mode/default", [this](std_srvs::srv::Trigger::Request::SharedPtr,
                                std_srvs::srv::Trigger::Response::SharedPtr res) {
         std::lock_guard<std::mutex> lock(data_mutex_);
+        CancelDefaultPoseReturn("locomotion mode changed");
         locomotion_mode_ = kAutoMode;
         res->success = true;
         RCLCPP_INFO(get_logger(), "Locomotion mode → default (auto from cmd_vel)");
@@ -130,6 +137,7 @@ GearSonicInterface::GearSonicInterface(const rclcpp::NodeOptions& options)
         "~/mode/" + mode_name, [this, mv](std_srvs::srv::Trigger::Request::SharedPtr,
                                           std_srvs::srv::Trigger::Response::SharedPtr res) {
           std::lock_guard<std::mutex> lock(data_mutex_);
+          CancelDefaultPoseReturn("locomotion mode changed");
           locomotion_mode_ = mv;
           res->success = true;
           RCLCPP_INFO(get_logger(), "Locomotion mode → %d", mv);
@@ -147,6 +155,7 @@ GearSonicInterface::GearSonicInterface(const rclcpp::NodeOptions& options)
   target_height_sub_ = create_subscription<std_msgs::msg::Float64>(
       "~/target_height", 1, [this](std_msgs::msg::Float64::ConstSharedPtr msg) {
         std::lock_guard<std::mutex> lock(data_mutex_);
+        CancelDefaultPoseReturn("new height target");
         if (msg->data != target_height_) {
           RCLCPP_INFO(get_logger(), "Target base height → %.3f m", msg->data);
         }
@@ -269,6 +278,7 @@ void GearSonicInterface::OnEnableControl(std_srvs::srv::SetBool::Request::Shared
     // preventing the policy from running with empty input and going to a bad pose.
     {
       std::lock_guard<std::mutex> lock(data_mutex_);
+      CancelDefaultPoseReturn("control enable requested");
       heading_rad_ = 0.0;
       control_active_ = true;
     }
@@ -289,10 +299,121 @@ void GearSonicInterface::OnEnableControl(std_srvs::srv::SetBool::Request::Shared
     //   → kp=0, kd=8 for all joints → robot goes limp under gravity.
     // The deploy's planner timeout (~1 s) reverts locomotion to IDLE while keeping balance.
     std::lock_guard<std::mutex> lock(data_mutex_);
+    CancelDefaultPoseReturn("control disabled");
     control_active_ = false;
     RCLCPP_INFO(get_logger(), "enable_control(false): stopped. Robot reverts to IDLE after ~1 s.");
   }
   res->success = true;
+}
+
+void GearSonicInterface::OnReturnToDefaultPose(std_srvs::srv::Trigger::Response::SharedPtr res)
+{
+  std::lock_guard<std::mutex> lock(data_mutex_);
+  if (!zmq_sock_ || !deploy_connected_ || !control_active_ || streaming_smpl_) {
+    res->message = "Return requires connected, enabled planner control";
+    return;
+  }
+  if (locomotion_mode_ != kAutoMode && locomotion_mode_ != 4) {
+    res->message = "Return is supported only in default or idle_squat mode";
+    return;
+  }
+  if ((now() - last_cmd_vel_time_).seconds() <= cmd_vel_timeout_ &&
+      (cmd_vel_x_ != 0.0 || cmd_vel_y_ != 0.0 || cmd_angular_z_ != 0.0))
+  {
+    res->message = "Stop velocity commands before returning to the default pose";
+    return;
+  }
+  if (default_pose_return_ && !default_pose_return_->completed) {
+    res->message = "Return is already in progress";
+    return;
+  }
+  const double duration = get_parameter("return_to_default_pose_duration").as_double();
+  if (!std::isfinite(duration) || duration <= 0.0) {
+    res->message = "return_to_default_pose_duration must be finite and positive";
+    return;
+  }
+  if (!std::isfinite(target_height_) || !std::all_of(vr_position_.begin(), vr_position_.end(),
+                                                     [](float v) { return std::isfinite(v); }))
+  {
+    res->message = "Current targets must be finite";
+    return;
+  }
+  auto orientation = vr_orientation_;
+  for (size_t k = 0; k < 3; ++k) {
+    const size_t b = k * 4;
+    double norm = 0.0;
+    for (size_t j = 0; j < 4; ++j) {
+      norm += static_cast<double>(orientation[b + j]) * orientation[b + j];
+    }
+    if (!std::isfinite(norm) || norm < 1e-12) {
+      res->message = "Current orientations must be finite, nonzero quaternions";
+      return;
+    }
+    for (size_t j = 0; j < 4; ++j) {
+      orientation[b + j] /= static_cast<float>(std::sqrt(norm));
+    }
+  }
+  // zmq_manager clamps squat heights to 0.2 m, including the -1 sentinel.
+  const double height = locomotion_mode_ == 4  ? std::max(0.2, target_height_)
+                        : target_height_ < 0.0 ? kDefaultStandingHeight
+                                               : target_height_;
+  default_pose_return_ = DefaultPoseReturn{vr_position_, orientation, height, duration,
+                                           std::chrono::steady_clock::now()};
+  cmd_vel_x_ = cmd_vel_y_ = cmd_angular_z_ = 0.0;
+  res->success = true;
+  res->message = "Return started; new commands cancel it";
+  RCLCPP_INFO(get_logger(), "Returning to default pose over %.2f s", duration);
+}
+
+void GearSonicInterface::CancelDefaultPoseReturn(const char* reason)
+{
+  if (default_pose_return_ && !default_pose_return_->completed) {
+    RCLCPP_WARN(get_logger(), "Default pose return canceled: %s", reason);
+  }
+  default_pose_return_.reset();
+}
+
+void GearSonicInterface::UpdateDefaultPoseReturn()
+{
+  if (!default_pose_return_ || default_pose_return_->completed) {
+    return;
+  }
+  auto& state = *default_pose_return_;
+  const double elapsed =
+      std::chrono::duration<double>(std::chrono::steady_clock::now() - state.start).count();
+  const double t = std::clamp(elapsed / state.duration, 0.0, 1.0);
+  const float a = static_cast<float>(t * t * (3.0 - 2.0 * t));
+  for (size_t j = 0; j < vr_position_.size(); ++j) {
+    vr_position_[j] = state.position[j] + a * (kDefaultVrPosition[j] - state.position[j]);
+  }
+  // Shortest-path normalized lerp; q and -q represent the same rotation.
+  for (size_t k = 0; k < 3; ++k) {
+    const size_t b = k * 4;
+    float dot = 0.0f;
+    float target_norm = 0.0f;
+    for (size_t j = 0; j < 4; ++j) {
+      dot += state.orientation[b + j] * kDefaultVrOrientation[b + j];
+      target_norm += kDefaultVrOrientation[b + j] * kDefaultVrOrientation[b + j];
+    }
+    const float scale = (dot < 0.0f ? -1.0f : 1.0f) / std::sqrt(target_norm);
+    float norm = 0.0f;
+    for (size_t j = 0; j < 4; ++j) {
+      vr_orientation_[b + j] =
+          (1.0f - a) * state.orientation[b + j] + a * scale * kDefaultVrOrientation[b + j];
+      norm += vr_orientation_[b + j] * vr_orientation_[b + j];
+    }
+    for (size_t j = 0; j < 4; ++j) {
+      vr_orientation_[b + j] /= std::sqrt(norm);
+    }
+  }
+  target_height_ = state.height + a * (kDefaultStandingHeight - state.height);
+  any_pose_received_ = true;
+  last_pose_time_ = now();
+  if (t >= 1.0) {
+    locomotion_mode_ = kAutoMode;
+    state.completed = true;
+    RCLCPP_INFO(get_logger(), "Default pose targets reached; holding targets");
+  }
 }
 
 // ──────────────────────────────────────────────
@@ -302,6 +423,9 @@ void GearSonicInterface::OnEnableControl(std_srvs::srv::SetBool::Request::Shared
 void GearSonicInterface::OnCmdVel(geometry_msgs::msg::Twist::ConstSharedPtr msg)
 {
   std::lock_guard<std::mutex> lock(data_mutex_);
+  if (msg->linear.x != 0.0 || msg->linear.y != 0.0 || msg->angular.z != 0.0) {
+    CancelDefaultPoseReturn("new velocity command");
+  }
   cmd_vel_x_ = msg->linear.x;
   cmd_vel_y_ = msg->linear.y;
   cmd_angular_z_ = msg->angular.z;
@@ -354,6 +478,7 @@ void GearSonicInterface::StoreTargetPose(size_t idx, const geometry_msgs::msg::P
   }
 
   std::lock_guard<std::mutex> lock(data_mutex_);
+  CancelDefaultPoseReturn("new pose target");
   vr_position_[idx * 3 + 0] = px;
   vr_position_[idx * 3 + 1] = py;
   vr_position_[idx * 3 + 2] = pz;
@@ -400,6 +525,8 @@ void GearSonicInterface::TimerCallback()
                                     "Call ~/enable_control true to start.");
         } else if (!connected && deploy_connected_) {
           deploy_connected_ = false;
+          std::lock_guard<std::mutex> lock(data_mutex_);
+          CancelDefaultPoseReturn("ZMQ connection lost");
           RCLCPP_WARN(get_logger(), "gear_sonic ZMQ connection lost.");
         }
       }
@@ -422,12 +549,12 @@ void GearSonicInterface::TimerCallback()
 
   std::lock_guard<std::mutex> lock(data_mutex_);
 
+  UpdateDefaultPoseReturn();
+
   // ── Pose target timeout ────────────────────────────────────────────────
-  // Mirror pico_manager: when the VR pose stream stops, vr fields are no longer
-  // sent, the deploy sets has_vr_3point_control_ = false and reverts to the
-  // planner reference motion. Without this, the last target would be latched
-  // forever and leak into later sessions.
-  if (any_pose_received_ && pose_timeout_ > 0.0 &&
+  // Hold the last targets by default to avoid snapping to the planner reference.
+  // A positive pose_timeout explicitly opts into releasing VR tracking.
+  if (any_pose_received_ && !default_pose_return_ && pose_timeout_ > 0.0 &&
       (now() - last_pose_time_).seconds() > pose_timeout_)
   {
     any_pose_received_ = false;
@@ -682,6 +809,7 @@ void GearSonicInterface::OnEnableSmplStream(std_srvs::srv::SetBool::Request::Sha
     }
     {
       std::lock_guard<std::mutex> lock(data_mutex_);
+      CancelDefaultPoseReturn("SMPL mode changed");
       smpl_window_.clear();
       streaming_smpl_ = true;
       control_active_ = true;
@@ -698,6 +826,7 @@ void GearSonicInterface::OnEnableSmplStream(std_srvs::srv::SetBool::Request::Sha
   } else {
     {
       std::lock_guard<std::mutex> lock(data_mutex_);
+      CancelDefaultPoseReturn("SMPL mode changed");
       streaming_smpl_ = false;
       smpl_window_.clear();
       // Auto-resume planner/VR-3PT control so disabling the SMPL stream alone returns the

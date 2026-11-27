@@ -48,8 +48,8 @@
  * for accurate reproduction.
  *
  * After a trajectory finishes the last FK targets are held (published every
- * tick) so that gear_sonic_interface's pose_timeout does not release VR
- * tracking. Chain joints that are not part of the trajectory are frozen at
+ * tick), including when gear_sonic_interface has a positive pose_timeout.
+ * Chain joints that are not part of the trajectory are frozen at
  * their current /joint_states values when the goal is accepted.
  *
  * ── Virtual base-height DOF (squat planning) ───────────────────────────────
@@ -431,8 +431,7 @@ private:
       return;
     }
 
-    // Publish every tick (also while holding) so gear_sonic_interface's
-    // pose_timeout does not release VR tracking between goals.
+    // Keep publishing between goals, including when a pose timeout is configured.
     PublishFkTargets();
 
     std_msgs::msg::Float64 height;
