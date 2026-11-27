@@ -29,10 +29,12 @@
 #pragma once
 
 #include <array>
+#include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <deque>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -63,6 +65,13 @@ namespace g1_hardware
  *               Also resets heading and starts the timer.
  *       false → stop sending planner messages only (no stop=1 command).
  *               Deploy reverts to IDLE after its 1-second planner timeout; robot stays balanced.
+ *
+ *   ~/return_to_default_pose (std_srvs/Trigger)
+ *       Start a smooth return from the last commanded targets to SONIC's default
+ *       standing targets and height. Requires enabled, stationary planner control
+ *       in default or idle_squat mode. The response acknowledges startup, not arrival.
+ *       New commands cancel the return; stop target publishers (including MoveIt) first.
+ *       The final targets remain held, including with a positive pose_timeout.
  *
  *   ~/mode/default    (std_srvs/Trigger) — auto-select gait from cmd_vel magnitude (default)
  *       mag < 0.05       → IDLE
@@ -122,6 +131,8 @@ namespace g1_hardware
  *   cmd_vel_timeout (double, default 0.5 s) — cmd_vel zeroed if no message within this window
  *   pose_timeout    (double, default 0.0 s) — <= 0 holds the last pose targets;
  *                   > 0 releases VR tracking if no pose arrives within this window
+ *   return_to_default_pose_duration (double, default 5.0 s) — read on each request;
+ *                   must be finite and positive
  *   left_wrist_compliance  (double, default 0.0)
  *   right_wrist_compliance (double, default 0.0)
  *   head_compliance        (double, default 0.0)
@@ -146,6 +157,10 @@ public:
 private:
   void OnEnableControl(std_srvs::srv::SetBool::Request::SharedPtr req,
                        std_srvs::srv::SetBool::Response::SharedPtr res);
+  void OnReturnToDefaultPose(std_srvs::srv::Trigger::Response::SharedPtr res);
+  // Called with data_mutex_ held.
+  void CancelDefaultPoseReturn(const char* reason);
+  void UpdateDefaultPoseReturn();
   void OnCmdVel(geometry_msgs::msg::Twist::ConstSharedPtr msg);
   void OnLeftWrist(geometry_msgs::msg::PoseStamped::ConstSharedPtr msg);
   void OnRightWrist(geometry_msgs::msg::PoseStamped::ConstSharedPtr msg);
@@ -188,6 +203,7 @@ private:
   static std::vector<uint8_t> BuildPoseMessage(const std::deque<SmplFrame>& frames);
 
   rclcpp::Service<std_srvs::srv::SetBool>::SharedPtr enable_control_srv_;
+  rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr return_to_default_pose_srv_;
   // One Trigger service per LocomotionMode (indexed by mode value 0–19)
   std::vector<rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr> mode_services_;
 
@@ -245,6 +261,22 @@ private:
   bool any_pose_received_{false};                   // true once at least one pose topic arrives
   rclcpp::Time last_pose_time_{0, 0, RCL_ROS_TIME}; // last pose target receive time
   double pose_timeout_{0.0}; // seconds; <= 0 holds targets, > 0 releases stale targets
+
+  // SONIC PlannerConfig::default_height. Interpolate numeric heights, not the -1 sentinel.
+  static constexpr double kDefaultStandingHeight = 0.788740;
+
+  struct DefaultPoseReturn
+  {
+    std::array<float, 9> position;
+    std::array<float, 12> orientation;
+    double height;
+    double duration;
+    std::chrono::steady_clock::time_point start;
+    bool completed{false};
+  };
+
+  // Keep the completed state until a new command to suppress pose_timeout.
+  std::optional<DefaultPoseReturn> default_pose_return_;
 
   // Graceful arm-lowering ramp duration in the destructor (fixed, not a parameter).
   // Gantry-suspended use is assumed; the robot goes limp after the socket closes.
