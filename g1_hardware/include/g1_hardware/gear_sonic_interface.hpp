@@ -103,10 +103,9 @@ namespace g1_hardware
  *         right wrist: pos + R(q) * ( 0.18, +0.025, 0.0 )
  *         torso/head:  pos + R(q) * ( 0.0,   0.0,   0.35 )
  *       Set the parameter to false to send raw keypoint targets yourself.
- *       If no pose message arrives within pose_timeout, vr fields are dropped
- *       from planner messages (deploy releases VR tracking and reverts to the
- *       planner reference motion) — same semantics as pico_manager when the
- *       VR stream stops.
+ *       The last targets are held by default when pose messages stop.
+ *       A positive pose_timeout releases VR tracking after that interval and
+ *       returns to the planner reference motion.
  *
  * ── Coordinate frame for PoseStamped positions ────────────────────────────
  *   Positions must be in the G1's "pelvis" TF frame (URDF root link).
@@ -121,8 +120,8 @@ namespace g1_hardware
  *   zmq_port        (int,    default 5556)
  *   publish_rate    (double, default 50.0 Hz)
  *   cmd_vel_timeout (double, default 0.5 s) — cmd_vel zeroed if no message within this window
- *   pose_timeout    (double, default 0.5 s) — vr fields dropped from planner messages if no
- *                   pose target arrives within this window (<= 0 keeps the last targets forever)
+ *   pose_timeout    (double, default 0.0 s) — <= 0 holds the last pose targets;
+ *                   > 0 releases VR tracking if no pose arrives within this window
  *   left_wrist_compliance  (double, default 0.0)
  *   right_wrist_compliance (double, default 0.0)
  *   head_compliance        (double, default 0.0)
@@ -245,7 +244,7 @@ private:
   bool apply_body_offset_{true};                         // set from parameter in ctor
   bool any_pose_received_{false};                   // true once at least one pose topic arrives
   rclcpp::Time last_pose_time_{0, 0, RCL_ROS_TIME}; // last pose target receive time
-  double pose_timeout_{0.5}; // seconds; vr fields dropped if no pose within this window
+  double pose_timeout_{0.0}; // seconds; <= 0 holds targets, > 0 releases stale targets
 
   // Graceful arm-lowering ramp duration in the destructor (fixed, not a parameter).
   // Gantry-suspended use is assumed; the robot goes limp after the socket closes.

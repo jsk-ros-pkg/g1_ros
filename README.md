@@ -125,7 +125,7 @@ ros2 service call /gear_sonic_interface/enable_control std_srvs/srv/SetBool "{da
 ros2 topic pub /cmd_vel geometry_msgs/msg/Twist "{linear: {x: 0.5}}" -r 10
 ```
 
-Locomotion modes (`~/mode/*` services), VR 3-point upper-body targets, base height (`~/target_height`) and full-body SMPL streaming are also available. See the header comment of `g1_hardware/include/g1_hardware/gear_sonic_interface.hpp` for the full interface. Pose targets are interpreted as URDF link poses (the `vr_3point_body_offset` keypoint offset is applied internally) and are tracked stiffly by default (`left_wrist_compliance` / `right_wrist_compliance` / `head_compliance` launch arguments, 0.0-1.0 each, 0.0 = exact tracking); targets are released when their topic stops for `pose_timeout` (0.5 s).
+Locomotion modes (`~/mode/*` services), VR 3-point upper-body targets, base height (`~/target_height`) and full-body SMPL streaming are also available. See the header comment of `g1_hardware/include/g1_hardware/gear_sonic_interface.hpp` for the full interface. Pose targets are interpreted as URDF link poses (the `vr_3point_body_offset` keypoint offset is applied internally) and are tracked stiffly by default (`left_wrist_compliance` / `right_wrist_compliance` / `head_compliance` launch arguments, 0.0-1.0 each, 0.0 = exact tracking). The last targets are held when publishing stops (`pose_timeout=0.0` by default); a positive `pose_timeout` opts into releasing them. `/cmd_vel` still times out after 0.5 s.
 
 ### MoveIt
 
