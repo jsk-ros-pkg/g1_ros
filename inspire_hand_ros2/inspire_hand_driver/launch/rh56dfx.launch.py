@@ -15,7 +15,13 @@ def _setup(context):
     namespace = "/" + LaunchConfiguration("namespace").perform(context).strip("/")
     mappings = {
         name: LaunchConfiguration(name).perform(context)
-        for name in ("side", "device", "close_hand_on_deactivate")
+        for name in (
+            "side",
+            "device",
+            "baudrate",
+            "hand_id",
+            "close_hand_on_deactivate",
+        )
     }
     mappings["action_prefix"] = namespace
     description = xacro.process_file(
@@ -54,6 +60,12 @@ def _setup(context):
 def generate_launch_description():
     return LaunchDescription(
         [
+            DeclareLaunchArgument(
+                "baudrate", default_value="115200", choices=["115200", "57600", "19200"]
+            ),
+            DeclareLaunchArgument(
+                "hand_id", default_value="1", description="Serial device ID (1-254)"
+            ),
             DeclareLaunchArgument("namespace", default_value="inspire_hand"),
             DeclareLaunchArgument(
                 "side", default_value="right", choices=["right", "left"]

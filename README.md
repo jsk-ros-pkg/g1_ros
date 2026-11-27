@@ -44,6 +44,8 @@ ros2 launch g1_bringup g1_bringup.launch.py network_interface:=eth0 hand_type:=i
 
 By default, the driver communicates directly with the hands over USB serial. Run the command on the computer connected to the hand adapters. If the [DDS bridge](#dds-bridge) is running, stop it first to release the ports.
 
+For a hand with custom serial settings, add e.g. `inspire_right_baudrate:=57600 inspire_right_hand_id:=2` (use `inspire_left_baudrate` and `inspire_left_hand_id` for the left hand).
+
 G1 trajectories use `/right_hand_controller/follow_joint_trajectory` and `/left_hand_controller/follow_joint_trajectory`. The maintenance actions use `inspire_hand_interfaces/action/HandMaintenance` under `/right_hand` and `/left_hand`.
 
 The hands close on deactivation by default. Add `close_hand_on_deactivate:=false` to disable this behavior.

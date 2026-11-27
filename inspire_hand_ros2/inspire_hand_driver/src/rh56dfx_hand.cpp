@@ -52,8 +52,24 @@ uint8_t checksum(const std::vector<uint8_t>& frame)
 }
 } // namespace
 
-RH56DFXHand::RH56DFXHand(const std::string& device)
+RH56DFXHand::RH56DFXHand(const std::string& device, int baudrate, int hand_id) : hand_id_(hand_id)
 {
+  if (hand_id < 1 || hand_id > 254)
+    throw std::invalid_argument("hand_id must be between 1 and 254");
+  speed_t speed;
+  switch (baudrate) {
+  case 115200:
+    speed = B115200;
+    break;
+  case 57600:
+    speed = B57600;
+    break;
+  case 19200:
+    speed = B19200;
+    break;
+  default:
+    throw std::invalid_argument("baudrate must be 115200, 57600 or 19200");
+  }
   fd_ = open(device.c_str(), O_RDWR | O_NOCTTY | O_NONBLOCK | O_CLOEXEC);
   if (fd_ < 0)
     throw std::system_error(errno, std::generic_category(), device);
@@ -64,7 +80,7 @@ RH56DFXHand::RH56DFXHand(const std::string& device)
     cfmakeraw(&settings);
     settings.c_cflag &= ~(CSTOPB | CRTSCTS);
     settings.c_cflag |= CLOCAL | CREAD;
-    if (cfsetspeed(&settings, B115200) || tcsetattr(fd_, TCSANOW, &settings))
+    if (cfsetspeed(&settings, speed) || tcsetattr(fd_, TCSANOW, &settings))
       throw std::system_error(errno, std::generic_category(), device);
     maintenance(Operation::ClearError);
     positions_ = read_positions();
@@ -84,7 +100,7 @@ void RH56DFXHand::send(uint8_t op, uint16_t address, const std::vector<uint8_t>&
 {
   std::vector<uint8_t> frame{0xeb,
                              0x90,
-                             1,
+                             static_cast<uint8_t>(hand_id_),
                              static_cast<uint8_t>(3 + data.size()),
                              op,
                              static_cast<uint8_t>(address),
@@ -101,7 +117,7 @@ std::vector<uint8_t> RH56DFXHand::reply(uint8_t op, uint16_t address, size_t siz
 {
   std::vector<uint8_t> frame(size + 8);
   transfer(fd_, frame.data(), frame.size(), false, timeout_ms);
-  if (frame[0] != 0x90 || frame[1] != 0xeb || frame[2] != 1 || frame[3] != size + 3 ||
+  if (frame[0] != 0x90 || frame[1] != 0xeb || frame[2] != hand_id_ || frame[3] != size + 3 ||
       frame[4] != op || frame[5] != (address & 255) || frame[6] != (address >> 8) ||
       frame.back() != checksum(frame) || (op == kWrite && frame[7] != 1))
     throw std::runtime_error("Invalid RH56DFX response for register " + std::to_string(address));

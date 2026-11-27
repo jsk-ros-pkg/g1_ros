@@ -100,6 +100,15 @@ def _launch_setup(context, *args, **kwargs):
     inspire_state_timeout_sec = LaunchConfiguration(
         "inspire_state_timeout_sec"
     ).perform(context)
+    hand_serial_settings = {
+        name: LaunchConfiguration(name).perform(context)
+        for name in (
+            "inspire_right_baudrate",
+            "inspire_right_hand_id",
+            "inspire_left_baudrate",
+            "inspire_left_hand_id",
+        )
+    }
     inspire_right_device = LaunchConfiguration("inspire_right_device").perform(context)
     inspire_left_device = LaunchConfiguration("inspire_left_device").perform(context)
     close_hand_on_deactivate = LaunchConfiguration("close_hand_on_deactivate").perform(
@@ -121,6 +130,7 @@ def _launch_setup(context, *args, **kwargs):
             "inspire_command_topic": inspire_command_topic,
             "inspire_state_topic": inspire_state_topic,
             "inspire_state_timeout_sec": inspire_state_timeout_sec,
+            **hand_serial_settings,
             "inspire_right_device": inspire_right_device,
             "inspire_left_device": inspire_left_device,
             "close_hand_on_deactivate": close_hand_on_deactivate,
@@ -273,6 +283,28 @@ def generate_launch_description():
                 "inspire_state_timeout_sec",
                 default_value="3.0",
                 description="Seconds to wait for the first RH56DFX DDS state",
+            ),
+            DeclareLaunchArgument(
+                "inspire_right_baudrate",
+                default_value="115200",
+                choices=["115200", "57600", "19200"],
+                description="RH56DFX right serial baud rate",
+            ),
+            DeclareLaunchArgument(
+                "inspire_right_hand_id",
+                default_value="1",
+                description="RH56DFX right serial device ID (1-254)",
+            ),
+            DeclareLaunchArgument(
+                "inspire_left_baudrate",
+                default_value="115200",
+                choices=["115200", "57600", "19200"],
+                description="RH56DFX left serial baud rate",
+            ),
+            DeclareLaunchArgument(
+                "inspire_left_hand_id",
+                default_value="1",
+                description="RH56DFX left serial device ID (1-254)",
             ),
             DeclareLaunchArgument(
                 "inspire_right_device",

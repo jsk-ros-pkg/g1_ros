@@ -7,4 +7,7 @@ ament_auto_add_library(${PROJECT_NAME} SHARED
   src/rh56dfx_hand.cpp)
 target_compile_features(${PROJECT_NAME} PUBLIC cxx_std_17)
 pluginlib_export_plugin_description_file(hardware_interface plugins.xml)
+install(PROGRAMS scripts/configure_rh56dfx.py
+  DESTINATION lib/${PROJECT_NAME}
+  RENAME configure_rh56dfx)
 ament_auto_package(INSTALL_TO_SHARE config launch urdf)

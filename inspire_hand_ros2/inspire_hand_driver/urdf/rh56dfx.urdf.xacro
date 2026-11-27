@@ -1,5 +1,7 @@
 <?xml version="1.0"?>
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="rh56dfx">
+  <xacro:arg name="baudrate" default="115200"/>
+  <xacro:arg name="hand_id" default="1"/>
   <xacro:arg name="device" default="/dev/ttyUSB0"/>
   <xacro:arg name="side" default="right"/>
   <xacro:arg name="action_prefix" default="/inspire_hand"/>
@@ -25,5 +27,5 @@
   <xacro:finger_joint name="middle_proximal" xyz="0.00028533 -0.1371 ${0.01295 if left else -0.01295}" rpy="${0 if left else -3.1416} 0 0" axis="${finger_axis}" lower="0" upper="1.7"/>
   <xacro:finger_joint name="ring_proximal" xyz="0.00028533 -0.13691 ${-0.0062872 if left else 0.0062872}" rpy="${0.05236 if left else 3.0892} 0 0" axis="${finger_axis}" lower="0" upper="1.7"/>
   <xacro:finger_joint name="pinky_proximal" xyz="0.00028533 -0.13571 ${-0.025488 if left else 0.025488}" rpy="${0.10472 if left else 3.0369} 0 0" axis="${finger_axis}" lower="0" upper="1.7"/>
-  <xacro:rh56dfx_serial_system name="RH56DFX" prefix="" device="$(arg device)" action_prefix="$(arg action_prefix)" close_hand_on_deactivate="$(arg close_hand_on_deactivate)"/>
+  <xacro:rh56dfx_serial_system name="RH56DFX" prefix="" device="$(arg device)" baudrate="$(arg baudrate)" hand_id="$(arg hand_id)" action_prefix="$(arg action_prefix)" close_hand_on_deactivate="$(arg close_hand_on_deactivate)"/>
 </robot>

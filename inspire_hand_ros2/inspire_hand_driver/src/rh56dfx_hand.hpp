@@ -19,7 +19,7 @@ class RH56DFXHand : public std::enable_shared_from_this<RH56DFXHand>
 {
 public:
   using Positions = std::array<double, 6>;
-  explicit RH56DFXHand(const std::string& device);
+  RH56DFXHand(const std::string& device, int baudrate, int hand_id);
   ~RH56DFXHand();
   void start(const rclcpp::Node::SharedPtr& node, const std::string& action_prefix);
   Positions positions();
@@ -42,6 +42,7 @@ private:
   void maintenance(Operation op);
   void add_action(const rclcpp::Node::SharedPtr& node, const std::string& name, Operation op);
 
+  const int hand_id_;
   int fd_{-1};
   std::mutex mutex_;
   std::condition_variable wake_;

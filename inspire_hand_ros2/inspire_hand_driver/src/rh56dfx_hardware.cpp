@@ -31,6 +31,7 @@
 #include "rh56dfx_hand.hpp"
 
 #include <algorithm>
+#include <charconv>
 #include <cmath>
 #include <exception>
 #include <hardware_interface/lexical_casts.hpp>
@@ -43,6 +44,21 @@ namespace inspire_hand_driver
 {
 namespace
 {
+
+int integer_parameter(const hardware_interface::HardwareInfo& info, const std::string& name,
+                      int fallback)
+{
+  const auto it = info.hardware_parameters.find(name);
+  if (it == info.hardware_parameters.end())
+    return fallback;
+  const auto& value = it->second;
+  const char* end = value.data() + value.size();
+  int result;
+  const auto parsed = std::from_chars(value.data(), end, result);
+  if (parsed.ec != std::errc{} || parsed.ptr != end)
+    throw std::invalid_argument("Invalid " + name + ": " + value);
+  return result;
+}
 
 using JointConfig = RH56DFXHardwareBase::JointConfig;
 
@@ -249,7 +265,9 @@ private:
     const auto& params = info_.hardware_parameters;
     if (params.at("device") == "none")
       return;
-    hand_ = std::make_shared<RH56DFXHand>(params.at("device"));
+    hand_ = std::make_shared<RH56DFXHand>(params.at("device"),
+                                          integer_parameter(info_, "baudrate", 115200),
+                                          integer_parameter(info_, "hand_id", 1));
     auto prefix = params.find("action_prefix");
     std::string action_prefix = prefix == params.end() ? "" : prefix->second;
     if (!action_prefix.empty() && action_prefix.back() != '/')
