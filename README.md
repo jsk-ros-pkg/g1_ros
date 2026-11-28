@@ -20,13 +20,6 @@ colcon build --symlink-install --packages-up-to g1_bringup
 
 Please connect your computer to the robot following [official instruction](https://support.unitree.com/home/en/G1_developer/quick_development#heading-7). Please check the network interface name.
 
-If the robot has Inspire RH56DFX hands and you want to move them, run the hand service:
-```shell
-ssh unitree@192.168.123.164  # Information required for ssh (IP address, user name, password): https://support.unitree.com/home/en/G1_developer/about_G1#heading-6
-cd ~/dfx_inspire_service/build
-sudo ./inspire_g1 -k -u  # This script must continue to run in the background. Required branch: https://github.com/pazeshun/dfx_inspire_service/tree/pazeshun-devel (https://github.com/unitreerobotics/dfx_inspire_service/pull/4 + https://github.com/unitreerobotics/dfx_inspire_service/pull/5
-```
-
 Then launch the nodes.
 
 ```shell
@@ -35,30 +28,49 @@ export FASTDDS_BUILTIN_TRANSPORTS=LARGE_DATA # This requires for publishing/subs
 ros2 launch g1_bringup g1_bringup.launch.py network_interface:=<network interface name> use_d435i:=true # if you want to use d435i on the G1
 ```
 
-If you want to move Inspire RH56DFX hands, run the following instead:
-
-```shell
-ros2 launch g1_bringup g1_bringup.launch.py network_interface:=<network interface name> hand_type:=inspire_dfq
-```
-
-By default, the hands close when their hardware interface is deactivated.
-To disable this behavior, run the following instead:
-
-```shell
-ros2 launch g1_bringup g1_bringup.launch.py network_interface:=<network interface name> hand_type:=inspire_dfq close_hand_on_deactivate:=false
-```
-
-To activate ROS controller
+To activate the upper-body controller:
 
 ```shell
 ros2 control set_controller_state upper_body_controller active
 ```
 
-To run hand motion demo
+### Inspire RH56DFX hands
+
+To enable ROS 2 control of the Inspire RH56DFX hands, launch the G1 nodes with `hand_type:=inspire_dfq`.
+
+```shell
+ros2 launch g1_bringup g1_bringup.launch.py network_interface:=eth0 hand_type:=inspire_dfq
+```
+
+By default, the driver communicates directly with the hands over USB serial. Run the command on the computer connected to the hand adapters. If the [DDS bridge](#dds-bridge) is running, stop it first to release the ports.
+
+For a hand with custom serial settings, add e.g. `inspire_right_baudrate:=57600 inspire_right_hand_id:=2` (use `inspire_left_baudrate` and `inspire_left_hand_id` for the left hand).
+
+In another terminal, run the hand motion demo:
 
 ```shell
 ros2 run g1_bringup inspire_dfx_hand_open_close_demo --ros-args -p hand:=both
 ```
+
+If a hand joint stops responding to motion commands during direct serial control, follow the [hand maintenance procedure](inspire_hand_ros2/README.md#hand-maintenance). Use `/right_hand` or `/left_hand` for the affected hand.
+
+When the hand hardware is deactivated (for example, by stopping `g1_bringup.launch.py`
+with Ctrl-C), the driver opens the hands first to help prevent the fingers from colliding as they close. It waits 0.8 s before sending the close command.
+Add `close_hand_on_deactivate:=false` to skip both movements.
+
+#### DDS bridge
+
+`inspire_g1` connects the hand USB adapters to Unitree DDS. To use it, start it on the robot in a separate terminal and leave it running:
+
+```shell
+ssh unitree@192.168.123.164
+cd ~/dfx_inspire_service/build
+sudo ./inspire_g1 -k -u
+```
+
+`-u` selects `/dev/inspire_left` and `/dev/inspire_right`. `-k` skips any hand whose port cannot be opened. See the [bridge setup instructions](https://github.com/pazeshun/dfx_inspire_service/tree/pazeshun-devel) for the build and device naming rules.
+
+Then add `inspire_transport:=dds` to the hand bringup command above.
 
 ## Audio playback and TTS
 
@@ -138,7 +150,7 @@ The MoveIt model additionally gains a virtual prismatic joint `pelvis_height_joi
 - The RViz robot display keeps the legs straight while squatting (the lift joint is a planning-only dummy; the real legs are driven by the policy).
 
 > [!WARNING]
-> Do **not** activate `upper_body_controller` while SONIC is in control — its arm commands conflict with the whole-body policy. The Inspire hand controllers use separate DDS topics and can be used together with SONIC.
+> Do **not** activate `upper_body_controller` while SONIC is in control — its arm commands conflict with the whole-body policy. The Inspire hand controllers use the hand serial ports and can be used together with SONIC.
 
 ## Running as systemd services (on the robot)
 
@@ -146,7 +158,7 @@ The `etc/` directory mirrors the layout under `/etc` on the robot. `etc/systemd/
 
 | Unit | What it runs | Autostart |
 |---|---|---|
-| `inspire-g1.service` | Inspire RH56DFX hand service (`inspire_g1`) | disabled (pulled in by the bringup) |
+| `inspire-g1.service` | Legacy RH56DFX serial-to-DDS bridge (`inspire_g1`) | manual |
 | `gear-sonic.service` | SONIC deploy stack (`gear_sonic_deploy/deploy.sh`) | disabled (pulled in by the bringup) |
 | `pico-manager.service` | Official PICO manager with optical-hand export | manual / pulled in by PICO teleop |
 | `pico-hand-track-teleop.service` | Starts the manager, ROS bringup and hand adapter via rocker | manual |
@@ -177,15 +189,15 @@ ansible-playbook -i <robot-host>, -u unitree --become \
     etc/install.yml
 ```
 
-No unit autostarts at boot. `ros2-g1-gear-sonic-bringup.service` pulls in `gear-sonic.service` and `inspire-g1.service` via `Requires=`, and `ros-usb-microphone.service` via `Wants=`, so starting the bringup starts all four.
+No unit autostarts at boot. `ros2-g1-gear-sonic-bringup.service` pulls in `gear-sonic.service` via `Requires=`, and `ros-usb-microphone.service` via `Wants=`, so starting the bringup starts all three.
 
 ### Start / stop
 
 ```shell
-# Start SONIC + Inspire hand + USB microphone + the ROS bringup
+# Start SONIC + USB microphone + the ROS bringup (including the serial hand driver)
 sudo systemctl start ros2-g1-gear-sonic-bringup
 # Stop
-sudo systemctl stop ros2-g1-gear-sonic-bringup gear-sonic inspire-g1
+sudo systemctl stop ros2-g1-gear-sonic-bringup gear-sonic
 # Follow logs
 journalctl -u ros2-g1-gear-sonic-bringup -f
 journalctl -u gear-sonic -f

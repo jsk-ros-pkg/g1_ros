@@ -1,120 +1,24 @@
 <?xml version="1.0"?>
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro">
-  <!--
-      Real-hardware ros2_control configuration for Inspire Robots RH56DFX.
-      The external inspire_g1 bridge owns the serial devices and exposes:
-        rt/inspire/cmd   unitree_go::msg::dds_::MotorCmds_
-        rt/inspire/state unitree_go::msg::dds_::MotorStates_
-      RH56DFX DDS q values are normalized as 0.0 = closed, 1.0 = open.
-    -->
-  <xacro:macro name="inspire_rh56dfx_ros2_control" params="name network_interface:='' command_topic:='rt/inspire/cmd' state_topic:='rt/inspire/state' state_timeout_sec:=3.0 close_hand_on_deactivate:=true">
-    <ros2_control name="${name}" type="system">
-      <hardware>
-        <plugin>g1_hardware/InspireRH56DFXHardwareInterface</plugin>
-        <param name="network_interface">${network_interface}</param>
-        <param name="command_topic">${command_topic}</param>
-        <param name="state_topic">${state_topic}</param>
-        <param name="state_timeout_sec">${state_timeout_sec}</param>
-        <param name="close_hand_on_deactivate">${close_hand_on_deactivate}</param>
-      </hardware>
-      <!-- Right RH56DFX hand - actuated joints only (URDF mimic joints excluded) -->
-      <joint name="R_thumb_proximal_yaw_joint">
-        <command_interface name="position">
-          <param name="min">-0.1</param>
-          <param name="max">1.3</param>
-        </command_interface>
-        <state_interface name="position"/>
-        <state_interface name="velocity"/>
-      </joint>
-      <joint name="R_thumb_proximal_pitch_joint">
-        <command_interface name="position">
-          <param name="min">-0.1</param>
-          <param name="max">0.6</param>
-        </command_interface>
-        <state_interface name="position"/>
-        <state_interface name="velocity"/>
-      </joint>
-      <joint name="R_index_proximal_joint">
-        <command_interface name="position">
-          <param name="min">0.0</param>
-          <param name="max">1.7</param>
-        </command_interface>
-        <state_interface name="position"/>
-        <state_interface name="velocity"/>
-      </joint>
-      <joint name="R_middle_proximal_joint">
-        <command_interface name="position">
-          <param name="min">0.0</param>
-          <param name="max">1.7</param>
-        </command_interface>
-        <state_interface name="position"/>
-        <state_interface name="velocity"/>
-      </joint>
-      <joint name="R_ring_proximal_joint">
-        <command_interface name="position">
-          <param name="min">0.0</param>
-          <param name="max">1.7</param>
-        </command_interface>
-        <state_interface name="position"/>
-        <state_interface name="velocity"/>
-      </joint>
-      <joint name="R_pinky_proximal_joint">
-        <command_interface name="position">
-          <param name="min">0.0</param>
-          <param name="max">1.7</param>
-        </command_interface>
-        <state_interface name="position"/>
-        <state_interface name="velocity"/>
-      </joint>
-      <!-- Left RH56DFX hand - actuated joints only (URDF mimic joints excluded) -->
-      <joint name="L_thumb_proximal_yaw_joint">
-        <command_interface name="position">
-          <param name="min">-0.1</param>
-          <param name="max">1.3</param>
-        </command_interface>
-        <state_interface name="position"/>
-        <state_interface name="velocity"/>
-      </joint>
-      <joint name="L_thumb_proximal_pitch_joint">
-        <command_interface name="position">
-          <param name="min">-0.1</param>
-          <param name="max">0.6</param>
-        </command_interface>
-        <state_interface name="position"/>
-        <state_interface name="velocity"/>
-      </joint>
-      <joint name="L_index_proximal_joint">
-        <command_interface name="position">
-          <param name="min">0.0</param>
-          <param name="max">1.7</param>
-        </command_interface>
-        <state_interface name="position"/>
-        <state_interface name="velocity"/>
-      </joint>
-      <joint name="L_middle_proximal_joint">
-        <command_interface name="position">
-          <param name="min">0.0</param>
-          <param name="max">1.7</param>
-        </command_interface>
-        <state_interface name="position"/>
-        <state_interface name="velocity"/>
-      </joint>
-      <joint name="L_ring_proximal_joint">
-        <command_interface name="position">
-          <param name="min">0.0</param>
-          <param name="max">1.7</param>
-        </command_interface>
-        <state_interface name="position"/>
-        <state_interface name="velocity"/>
-      </joint>
-      <joint name="L_pinky_proximal_joint">
-        <command_interface name="position">
-          <param name="min">0.0</param>
-          <param name="max">1.7</param>
-        </command_interface>
-        <state_interface name="position"/>
-        <state_interface name="velocity"/>
-      </joint>
-    </ros2_control>
+  <xacro:include filename="$(find inspire_hand_driver)/urdf/rh56dfx.ros2_control.xacro"/>
+  <xacro:macro name="inspire_rh56dfx_ros2_control" params="name network_interface transport command_topic state_topic state_timeout_sec right_device left_device right_baudrate:=115200 right_hand_id:=1 left_baudrate:=115200 left_hand_id:=1 close_hand_on_deactivate:=true">
+    <xacro:if value="${transport == 'serial'}">
+      <xacro:rh56dfx_serial_system name="RightRH56DFX" prefix="R_" device="${right_device}" baudrate="${right_baudrate}" hand_id="${right_hand_id}" action_prefix="right_hand" close_hand_on_deactivate="${close_hand_on_deactivate}"/>
+      <xacro:rh56dfx_serial_system name="LeftRH56DFX" side="left" prefix="L_" device="${left_device}" baudrate="${left_baudrate}" hand_id="${left_hand_id}" action_prefix="left_hand" close_hand_on_deactivate="${close_hand_on_deactivate}"/>
+    </xacro:if>
+    <xacro:if value="${transport == 'dds'}">
+      <ros2_control name="${name}" type="system">
+        <hardware>
+          <plugin>g1_hardware/InspireRH56DFXDDSHardwareInterface</plugin>
+          <param name="network_interface">${network_interface}</param>
+          <param name="command_topic">${command_topic}</param>
+          <param name="state_topic">${state_topic}</param>
+          <param name="state_timeout_sec">${state_timeout_sec}</param>
+          <param name="close_hand_on_deactivate">${close_hand_on_deactivate}</param>
+        </hardware>
+        <xacro:rh56dfx_control_joints prefix="R_"/>
+        <xacro:rh56dfx_control_joints prefix="L_" offset="6"/>
+      </ros2_control>
+    </xacro:if>
   </xacro:macro>
 </robot>

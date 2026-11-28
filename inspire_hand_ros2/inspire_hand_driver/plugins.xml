@@ -1,0 +1,6 @@
+<?xml version="1.0"?>
+<library path="inspire_hand_driver">
+  <class name="inspire_hand_driver/RH56DFXHardware" type="inspire_hand_driver::RH56DFXHardware" base_class_type="hardware_interface::SystemInterface">
+    <description>Six actuated joints of a single RH56DFX hand on a serial port.</description>
+  </class>
+</library>

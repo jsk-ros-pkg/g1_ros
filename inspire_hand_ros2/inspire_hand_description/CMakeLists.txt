@@ -1,0 +1,6 @@
+cmake_minimum_required(VERSION 3.22)
+project(inspire_hand_description)
+find_package(ament_cmake REQUIRED)
+install(DIRECTORY meshes urdf DESTINATION share/${PROJECT_NAME})
+install(FILES LICENSE NOTICE.md DESTINATION share/${PROJECT_NAME})
+ament_package()

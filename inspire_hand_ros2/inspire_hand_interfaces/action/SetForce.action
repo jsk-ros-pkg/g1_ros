@@ -1,0 +1,9 @@
+# Per-DOF gripping force thresholds in newtons (0 to 9.80665 N inclusive).
+# The RH56 manual describes these as the maximum force allowed at the fingertip
+# during closing, not a force setpoint or a guaranteed physical safety limit.
+# Register order: pinky, ring, middle, index, thumb bend, thumb rotation.
+float64[6] thresholds
+---
+# Success means the hand acknowledged the register write.
+string message
+---

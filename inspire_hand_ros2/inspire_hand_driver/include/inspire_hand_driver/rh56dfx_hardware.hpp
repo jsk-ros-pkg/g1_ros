@@ -28,25 +28,22 @@
 
 #pragma once
 
+#include <array>
 #include <hardware_interface/system_interface.hpp>
 #include <hardware_interface/types/hardware_interface_return_values.hpp>
-#include <mutex>
+#include <memory>
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp_lifecycle/state.hpp>
 #include <string>
-#include <unitree/idl/go2/MotorCmds_.hpp>
-#include <unitree/idl/go2/MotorStates_.hpp>
-#include <unitree/robot/channel/channel_publisher.hpp>
-#include <unitree/robot/channel/channel_subscriber.hpp>
 #include <vector>
 
-namespace g1_hardware
+namespace inspire_hand_driver
 {
 
-class InspireRH56DFXHardwareInterface : public hardware_interface::SystemInterface
+class RH56DFXHardwareBase : public hardware_interface::SystemInterface
 {
 public:
-  RCLCPP_SHARED_PTR_DEFINITIONS(InspireRH56DFXHardwareInterface)
+  RCLCPP_SHARED_PTR_DEFINITIONS(RH56DFXHardwareBase)
 
   hardware_interface::CallbackReturn on_init(const hardware_interface::HardwareInfo& info) override;
 
@@ -77,11 +74,18 @@ public:
     double deactivation_position;
   };
 
+protected:
+  explicit RH56DFXHardwareBase(size_t motor_count) : motor_count_(motor_count) {}
+
+  using Positions = std::vector<double>;
+  virtual void connect() = 0;
+  virtual void read_positions(Positions& state) = 0;
+  virtual void command(const Positions& target) = 0;
+  virtual void disconnect(const Positions* final_target) = 0;
+
 private:
-  std::string network_interface_;
-  std::string command_topic_{"rt/inspire/cmd"};
-  std::string state_topic_{"rt/inspire/state"};
-  double state_timeout_sec_{3.0};
+  size_t motor_count_;
+  Positions motor_positions_, motor_targets_;
   bool close_hand_on_deactivate_{true};
 
   std::vector<JointConfig> joint_configs_;
@@ -90,13 +94,6 @@ private:
   std::vector<double> hw_commands_;
 
   int active_command_interfaces_{0};
-
-  unitree::robot::ChannelPublisherPtr<unitree_go::msg::dds_::MotorCmds_> hand_command_publisher_;
-  unitree::robot::ChannelSubscriberPtr<unitree_go::msg::dds_::MotorStates_> hand_state_subscriber_;
-  unitree_go::msg::dds_::MotorCmds_ command_msg_;
-  unitree_go::msg::dds_::MotorStates_ state_msg_;
-  std::mutex state_mutex_;
-  bool state_received_{false};
 };
 
-} // namespace g1_hardware
+} // namespace inspire_hand_driver
