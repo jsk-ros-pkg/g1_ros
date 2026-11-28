@@ -23,7 +23,7 @@ class RH56DFXHand : public std::enable_shared_from_this<RH56DFXHand>
 {
 public:
   using Positions = std::array<double, 6>;
-  RH56DFXHand(const std::string& device, int baudrate, int hand_id);
+  RH56DFXHand(const std::string& device, int baudrate, int hand_id, bool exit_on_disconnect);
   ~RH56DFXHand();
   void start(const rclcpp::Node::SharedPtr& node, const std::string& action_prefix,
              const std::string& frame_prefix);
@@ -41,6 +41,7 @@ private:
     Calibrate
   };
   void run();
+  void report_disconnect(const std::string& reason);
   void send_positions(const Positions& target);
   Positions read_positions();
   void send(uint8_t op, uint16_t address, const std::vector<uint8_t>& data);
@@ -55,7 +56,9 @@ private:
   void publish_forces();
 
   const int hand_id_;
+  const bool exit_on_disconnect_;
   int fd_{-1};
+  std::string offline_reason_;
   std::mutex mutex_;
   std::condition_variable wake_;
   Positions positions_{}, target_{};

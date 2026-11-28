@@ -4,9 +4,10 @@
   <xacro:arg name="hand_id" default="1"/>
   <xacro:arg name="device" default="/dev/ttyUSB0"/>
   <xacro:arg name="side" default="right"/>
+  <xacro:arg name="exit_on_disconnect" default="true"/>
   <xacro:arg name="action_prefix" default="/inspire_hand"/>
   <xacro:arg name="close_hand_on_deactivate" default="true"/>
   <xacro:include filename="rh56dfx.ros2_control.xacro"/>
   <xacro:include filename="$(find inspire_hand_description)/urdf/rh56dfx_$(arg side).urdf"/>
-  <xacro:rh56dfx_serial_system name="RH56DFX" prefix="" side="$(arg side)" device="$(arg device)" baudrate="$(arg baudrate)" hand_id="$(arg hand_id)" action_prefix="$(arg action_prefix)" close_hand_on_deactivate="$(arg close_hand_on_deactivate)"/>
+  <xacro:rh56dfx_serial_system name="RH56DFX" prefix="" side="$(arg side)" device="$(arg device)" baudrate="$(arg baudrate)" hand_id="$(arg hand_id)" action_prefix="$(arg action_prefix)" close_hand_on_deactivate="$(arg close_hand_on_deactivate)" exit_on_disconnect="$(arg exit_on_disconnect)"/>
 </robot>

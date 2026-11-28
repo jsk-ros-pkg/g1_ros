@@ -263,11 +263,13 @@ private:
   void connect() override
   {
     const auto& params = info_.hardware_parameters;
-    if (params.at("device") == "none")
+    const bool exit_on_disconnect = params.count("exit_on_disconnect") &&
+                                    hardware_interface::parse_bool(params.at("exit_on_disconnect"));
+    if (params.at("device") == "none" && !exit_on_disconnect)
       return;
-    hand_ = std::make_shared<RH56DFXHand>(params.at("device"),
-                                          integer_parameter(info_, "baudrate", 115200),
-                                          integer_parameter(info_, "hand_id", 1));
+    hand_ = std::make_shared<RH56DFXHand>(
+        params.at("device"), integer_parameter(info_, "baudrate", 115200),
+        integer_parameter(info_, "hand_id", 1), exit_on_disconnect);
     auto prefix = params.find("action_prefix");
     std::string action_prefix = prefix == params.end() ? "" : prefix->second;
     if (!action_prefix.empty() && action_prefix.back() != '/')

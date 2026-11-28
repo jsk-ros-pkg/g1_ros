@@ -4,6 +4,7 @@
 #include <fcntl.h>
 #include <poll.h>
 #include <sys/file.h>
+#include <sys/stat.h>
 #include <termios.h>
 #include <unistd.h>
 
@@ -11,6 +12,7 @@
 #include <cerrno>
 #include <chrono>
 #include <cmath>
+#include <csignal>
 #include <numeric>
 #include <stdexcept>
 #include <system_error>
@@ -76,7 +78,9 @@ uint8_t checksum(const std::vector<uint8_t>& frame)
 }
 } // namespace
 
-RH56DFXHand::RH56DFXHand(const std::string& device, int baudrate, int hand_id) : hand_id_(hand_id)
+RH56DFXHand::RH56DFXHand(const std::string& device, int baudrate, int hand_id,
+                         bool exit_on_disconnect)
+: hand_id_(hand_id), exit_on_disconnect_(exit_on_disconnect)
 {
   if (hand_id < 1 || hand_id > 254)
     throw std::invalid_argument("hand_id must be between 1 and 254");
@@ -94,14 +98,49 @@ RH56DFXHand::RH56DFXHand(const std::string& device, int baudrate, int hand_id) :
   default:
     throw std::invalid_argument("baudrate must be 115200, 57600 or 19200");
   }
-  fd_ = open(device.c_str(), O_RDWR | O_NOCTTY | O_NONBLOCK | O_CLOEXEC);
-  if (fd_ < 0 && device_missing(errno)) {
+  auto offline = [&](const std::string& reason) {
+    offline_reason_ = device + ": " + reason;
     positions_.fill(1.0);
+  };
+  auto handle_error = [&](int error) {
+    if (error == ENOENT || error == ENOTDIR)
+      offline("device path not found");
+    else if (error == EISDIR)
+      offline("not a character device");
+    else if (device_missing(error))
+      offline("device unavailable");
+    else
+      throw std::system_error(error, std::generic_category(), device);
+  };
+
+  struct stat status
+  {
+  };
+
+  // Follow udev symlinks, but do not open a directory or other non-device path.
+  if (stat(device.c_str(), &status) < 0) {
+    handle_error(errno);
     return;
   }
-  if (fd_ < 0)
-    throw std::system_error(errno, std::generic_category(), device);
+  if (!S_ISCHR(status.st_mode)) {
+    offline("not a character device");
+    return;
+  }
+  fd_ = open(device.c_str(), O_RDWR | O_NOCTTY | O_NONBLOCK | O_CLOEXEC);
+  if (fd_ < 0) {
+    handle_error(errno);
+    return;
+  }
   try {
+    // The path may have been replaced between stat() and open().
+    if (fstat(fd_, &status) < 0)
+      throw std::system_error(errno, std::generic_category(), device);
+    if (!S_ISCHR(status.st_mode)) {
+      close(fd_);
+      fd_ = -1;
+      offline("not a character device");
+      return;
+    }
     termios settings{};
     if (flock(fd_, LOCK_EX | LOCK_NB) || tcgetattr(fd_, &settings))
       throw std::system_error(errno, std::generic_category(), device);
@@ -117,7 +156,7 @@ RH56DFXHand::RH56DFXHand(const std::string& device, int baudrate, int hand_id) :
     close(fd_);
     fd_ = -1;
     if (unplugged) {
-      positions_.fill(1.0);
+      offline("device disconnected during initialization");
       return;
     }
     throw;
@@ -309,7 +348,19 @@ void RH56DFXHand::start(const rclcpp::Node::SharedPtr& node, const std::string& 
   if (!stopping_)
     worker_ = std::thread(&RH56DFXHand::run, this);
   else
-    RCLCPP_WARN(logger_, "Hand is not connected; commands are disabled until reactivation.");
+    report_disconnect(offline_reason_);
+}
+
+void RH56DFXHand::report_disconnect(const std::string& reason)
+{
+  if (exit_on_disconnect_) {
+    RCLCPP_ERROR(logger_, "%s; stopping the standalone controller manager.", reason.c_str());
+    // Let the manager's signal handler shut down outside the serial worker,
+    // which must be joinable from on_deactivate().
+    std::raise(SIGTERM);
+  } else {
+    RCLCPP_WARN(logger_, "%s; hand commands are disabled until reactivation.", reason.c_str());
+  }
 }
 
 void RH56DFXHand::stop(const Positions* final_target)
@@ -384,8 +435,8 @@ void RH56DFXHand::run()
     if (fd_ >= 0 && hung_up(fd_)) {
       close(fd_);
       fd_ = -1;
-      stopping_ = true;
-      RCLCPP_WARN(logger_, "Hand disconnected; commands are disabled until reactivation.");
+      if (!stopping_.exchange(true))
+        report_disconnect("Hand disconnected");
     }
     if (request)
       busy_ = false;

@@ -50,11 +50,11 @@ the closing motion to finish. SIGKILL and power loss cannot run this sequence.
 Keep fingers clear; opening can release a held object. To skip both movements,
 launch with `close_hand_on_deactivate:=false`.
 
-An unplugged USB serial device does not stop the controllers or the other hand.
-The disconnected hand ignores commands and rejects maintenance goals. Its joint
-states retain the last measurement (the open pose if it was absent at startup).
-After reconnecting USB, stop any active trajectory and reactivate the hand hardware
-or relaunch to resume communication.
+If the USB hand is missing or unplugged, the standalone launch restarts the
+controller manager after 3 s and loads fresh controllers. Previous trajectories
+are not resumed. Set `exit_on_disconnect:=false` to keep the driver running
+instead (the behavior used on G1). In that mode, stop any active trajectory
+and reactivate the hand hardware or relaunch after reconnecting USB.
 
 ## Fingertip forces (direct serial only)
 
