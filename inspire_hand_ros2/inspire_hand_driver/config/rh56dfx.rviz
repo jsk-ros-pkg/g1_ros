@@ -3,7 +3,7 @@ Panels:
     Name: Displays
 Visualization Manager:
   Global Options:
-    Fixed Frame: hand_base_link
+    Fixed Frame: R_hand_base_link
     Background Color: 55; 55; 55
   Displays:
     - Class: rviz_default_plugins/RobotModel

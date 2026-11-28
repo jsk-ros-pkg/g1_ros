@@ -23,9 +23,9 @@ ros2 launch inspire_hand_driver rh56dfx.launch.py device:=/dev/ttyUSB0 side:=rig
 
 Add `use_rviz:=true` to view the selected hand and its measured motion in RViz.
 The standalone model comes from [inspire_hand_description](inspire_hand_description/NOTICE.md).
-TF topics are scoped to the hand namespace so that two hands can use the same frame names.
+TF topics are scoped to the hand namespace. Frame and joint names start with `L_` for a left hand and `R_` for a right hand.
 
-Use `side:=left` for the left-hand kinematic frames. Both sides use the same six joint names. To run two standalone hands, launch each with its own `device` and `namespace` (default `inspire_hand`).
+Use `side:=left` for a left hand and replace `R_` with `L_` in the trajectory below. To run two standalone hands, launch each with its own `device` and `namespace` (default `inspire_hand`).
 
 In another terminal, open the hand over two seconds and read its measured positions:
 
@@ -33,8 +33,8 @@ In another terminal, open the hand over two seconds and read its measured positi
 ros2 action send_goal /inspire_hand/position_joint_trajectory_controller/follow_joint_trajectory \
   control_msgs/action/FollowJointTrajectory '{
     trajectory: {
-      joint_names: [pinky_proximal_joint, ring_proximal_joint, middle_proximal_joint,
-                    index_proximal_joint, thumb_proximal_pitch_joint, thumb_proximal_yaw_joint],
+      joint_names: [R_pinky_proximal_joint, R_ring_proximal_joint, R_middle_proximal_joint,
+                    R_index_proximal_joint, R_thumb_proximal_pitch_joint, R_thumb_proximal_yaw_joint],
       points: [{positions: [0, 0, 0, 0, 0, 0], time_from_start: {sec: 2}}]
     }
   }'
@@ -53,7 +53,7 @@ launch with `close_hand_on_deactivate:=false`.
 If the USB hand is missing or unplugged, the standalone launch restarts the
 controller manager after 3 s and loads fresh controllers. Previous trajectories
 are not resumed. Set `exit_on_disconnect:=false` to keep the driver running
-instead (the behavior used on G1). In that mode, stop any active trajectory
+instead. In that mode, stop any active trajectory
 and reactivate the hand hardware or relaunch after reconnecting USB.
 
 ## Fingertip forces (direct serial only)
@@ -64,7 +64,7 @@ pinky, ring, middle, index, thumb bend, thumb rotation. A successful result mean
 the hand acknowledged the write, not that it reached the specified force.
 
 ```bash
-hand=/inspire_hand  # On G1: /left_hand or /right_hand
+hand=/inspire_hand
 ros2 action send_goal "$hand/set_force" inspire_hand_interfaces/action/SetForce \
   '{thresholds: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0]}'
 ros2 topic echo "$hand/index/wrench" --qos-reliability best_effort
@@ -72,8 +72,8 @@ ros2 topic echo "$hand/index/wrench" --qos-reliability best_effort
 
 Each successful serial sampling cycle publishes six `geometry_msgs/msg/WrenchStamped`
 samples with the same timestamp on `$hand/{pinky,ring,middle,index,thumb,thumb_rotation}/wrench`.
-Each finger has a fixed `<finger>_pad` frame on the contact side of its distal mesh
-(`L_` or `R_` prefix on G1). Positive bending force is represented along the
+Each finger has a fixed pad frame on the contact side of its distal mesh
+(for example, `L_index_pad` or `R_index_pad`). Positive bending force is represented along the
 outward pad normal (+Z), including thumb bending on `thumb/wrench`. The separate
 `thumb_rotation/wrench` uses the transverse tangent (+X) of the same thumb pad
 by convention; it is not a measured direction

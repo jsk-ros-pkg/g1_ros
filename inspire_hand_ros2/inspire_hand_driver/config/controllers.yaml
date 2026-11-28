@@ -9,12 +9,12 @@
 /**/position_joint_trajectory_controller:
   ros__parameters:
     joints:
-      - pinky_proximal_joint
-      - ring_proximal_joint
-      - middle_proximal_joint
-      - index_proximal_joint
-      - thumb_proximal_pitch_joint
-      - thumb_proximal_yaw_joint
+      - $(var rh56dfx_prefix)pinky_proximal_joint
+      - $(var rh56dfx_prefix)ring_proximal_joint
+      - $(var rh56dfx_prefix)middle_proximal_joint
+      - $(var rh56dfx_prefix)index_proximal_joint
+      - $(var rh56dfx_prefix)thumb_proximal_pitch_joint
+      - $(var rh56dfx_prefix)thumb_proximal_yaw_joint
     command_interfaces: [position]
     state_interfaces: [position, velocity]
     interpolate_from_desired_state: true

@@ -11,11 +11,12 @@ from launch.actions import (
     RegisterEventHandler,
 )
 from launch.conditions import IfCondition
-from launch.event_handlers import OnProcessExit, OnProcessStart
+from launch.event_handlers import OnProcessExit, OnProcessStart, OnShutdown
 from launch.events import matches_action
 from launch.events.process import ShutdownProcess
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
+from launch_ros.descriptions import ParameterFile
 import xacro
 
 
@@ -37,7 +38,12 @@ def _setup(context):
     description = xacro.process_file(
         str(share / "urdf/rh56dfx.urdf.xacro"), mappings=mappings
     ).toxml()
-    controllers = str(share / "config/controllers.yaml")
+    prefix = "L_" if mappings["side"] == "left" else "R_"
+    context.launch_configurations["rh56dfx_prefix"] = prefix
+    controller_params = ParameterFile(
+        share / "config/controllers.yaml", allow_substs=True
+    )
+    controllers = str(controller_params.evaluate(context))
     tf_topics = [("/tf", "tf"), ("/tf_static", "tf_static")]
     manager = Node(
         package="controller_manager",
@@ -88,12 +94,20 @@ def _setup(context):
             package="rviz2",
             executable="rviz2",
             namespace=namespace,
-            arguments=["-d", str(share / "config/rh56dfx.rviz")],
+            arguments=[
+                "-d",
+                str(share / "config/rh56dfx.rviz"),
+                "-f",
+                prefix + "hand_base_link",
+            ],
             remappings=tf_topics,
             condition=IfCondition(LaunchConfiguration("use_rviz")),
         ),
         RegisterEventHandler(
             OnProcessStart(target_action=manager, on_start=spawn_controllers)
+        ),
+        RegisterEventHandler(
+            OnShutdown(on_shutdown=lambda event, ctx: controller_params.cleanup())
         ),
         manager,
     ]

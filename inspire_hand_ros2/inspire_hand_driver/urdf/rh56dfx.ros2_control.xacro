@@ -24,7 +24,8 @@
     <xacro:rh56dfx_control_joint name="${prefix}thumb_proximal_yaw_joint" index="${offset + 5}" lower="-0.1" closed="1.3" deactivate="0.3"/>
   </xacro:macro>
   <xacro:macro name="rh56dfx_serial_system" params="name prefix device action_prefix baudrate:=115200 hand_id:=1 close_hand_on_deactivate:=true side:=right exit_on_disconnect:=false">
-    <xacro:rh56dfx_pads prefix="${prefix}" side="${side}"/>
+    <xacro:property name="frame_prefix" value="${prefix or ('L_' if side == 'left' else 'R_')}"/>
+    <xacro:rh56dfx_pads prefix="${frame_prefix}" side="${side}"/>
     <ros2_control name="${name}" type="system">
       <hardware>
         <plugin>inspire_hand_driver/RH56DFXHardware</plugin>
@@ -33,9 +34,7 @@
         <param name="device">${device}</param>
         <param name="exit_on_disconnect">${exit_on_disconnect}</param>
         <param name="action_prefix">${action_prefix}</param>
-        <xacro:if value="${prefix != ''}">
-          <param name="frame_prefix">${prefix}</param>
-        </xacro:if>
+        <param name="frame_prefix">${frame_prefix}</param>
         <param name="close_hand_on_deactivate">${close_hand_on_deactivate}</param>
       </hardware>
       <xacro:rh56dfx_control_joints prefix="${prefix}"/>
