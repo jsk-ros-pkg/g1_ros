@@ -73,6 +73,15 @@ rclcpp_components_register_node(g1_livox_interface
   EXECUTABLE g1_livox_interface_node
 )
 
+ament_auto_add_library(g1_motor_temperatures SHARED
+  src/g1_motor_temperatures.cpp
+)
+target_link_libraries(g1_motor_temperatures unitree_sdk2)
+rclcpp_components_register_node(g1_motor_temperatures
+  PLUGIN "g1_hardware::G1MotorTemperatures"
+  EXECUTABLE g1_motor_temperatures_node
+)
+
 ament_auto_add_library(g1_audio_interface SHARED
   src/g1_audio_interface.cpp
 )

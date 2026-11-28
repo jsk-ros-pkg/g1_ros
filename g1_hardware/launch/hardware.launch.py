@@ -133,6 +133,17 @@ def _launch_setup(context, *args, **kwargs):
         ),
         ComposableNode(
             package="g1_hardware",
+            plugin="g1_hardware::G1MotorTemperatures",
+            name="motor_temperatures",
+            parameters=[
+                {
+                    "network_interface": network_interface,
+                    "robot_description": robot_description,
+                },
+            ],
+        ),
+        ComposableNode(
+            package="g1_hardware",
             plugin="g1_hardware::G1LivoxInterfaceNode",
             name="g1_livox_interface",
             parameters=[{"network_interface": network_interface}],

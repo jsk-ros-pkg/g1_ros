@@ -15,7 +15,7 @@ Visualization Manager:
       Value: true
     - Class: rviz_default_plugins/RobotModel
       Name: RobotModel
-      Alpha: 1
+      Alpha: 0.5
       Collision Enabled: false
       Visual Enabled: true
       Description Source: Topic
@@ -35,6 +35,32 @@ Visualization Manager:
       TF Prefix: ""
       Update Interval: 0
       Value: true
+    - Class: rviz_default_plugins/Temperature
+      Name: Winding Temperature
+      Decay Time: 2
+      Size (m): 0.08
+      Style: Spheres
+      Topic:
+        Depth: 100
+        Durability Policy: Volatile
+        Filter size: 100
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /motor_temperatures/winding
+      Value: true
+    - Class: rviz_default_plugins/Temperature
+      Name: Casing Temperature
+      Decay Time: 2
+      Size (m): 0.08
+      Style: Spheres
+      Topic:
+        Depth: 100
+        Durability Policy: Volatile
+        Filter size: 100
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /motor_temperatures/casing
+      Value: false
     - Class: moveit_rviz_plugin/MotionPlanning
       Name: MotionPlanning
       Planning Request:
