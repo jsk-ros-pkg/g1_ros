@@ -25,22 +25,9 @@ Add `use_rviz:=true` to view the selected hand and its measured motion in RViz.
 The standalone model comes from [inspire_hand_description](inspire_hand_description/NOTICE.md).
 TF topics are scoped to the hand namespace so that two hands can use the same frame names.
 
-Use `side:=left` for the left-hand kinematic frames. Both sides use the same six joint names. To run two standalone hands, launch each with its own `device` and `namespace` (default `inspire_hand`). The driver clears errors once on activation and starts from measured joint positions. To leave the hand in its last pose on shutdown, set `close_hand_on_deactivate:=false`.
+Use `side:=left` for the left-hand kinematic frames. Both sides use the same six joint names. To run two standalone hands, launch each with its own `device` and `namespace` (default `inspire_hand`).
 
-On graceful shutdown (for example Ctrl-C), the driver first commands all six axes
-open to help prevent the fingers from colliding as they close. After the hand
-acknowledges the open command, the driver waits 0.8 s before sending the closing pose.
-If the open command fails or calibration has not finished, the driver skips closing. It does not wait for
-the closing motion to finish. SIGKILL and power loss cannot run this sequence.
-Keep fingers clear; opening can release a held object.
-
-An unplugged USB serial device does not stop the controllers or the other hand.
-The disconnected hand ignores commands and rejects maintenance goals. Its joint
-states retain the last measurement (the open pose if it was absent at startup).
-After reconnecting USB, stop any active trajectory and reactivate the hand hardware
-or relaunch to resume communication.
-
-To open the hand over two seconds and read its measured positions:
+In another terminal, open the hand over two seconds and read its measured positions:
 
 ```bash
 ros2 action send_goal /inspire_hand/position_joint_trajectory_controller/follow_joint_trajectory \
@@ -53,6 +40,21 @@ ros2 action send_goal /inspire_hand/position_joint_trajectory_controller/follow_
   }'
 ros2 topic echo --once /inspire_hand/joint_states
 ```
+
+The driver clears errors once on activation and starts from measured joint positions.
+When you stop `rh56dfx.launch.py` with Ctrl-C, the driver first commands all six axes
+open to help prevent the fingers from colliding as they close. After the hand
+acknowledges the open command, the driver waits 0.8 s before sending the closing pose.
+If the open command fails or calibration has not finished, the driver skips closing. It does not wait for
+the closing motion to finish. SIGKILL and power loss cannot run this sequence.
+Keep fingers clear; opening can release a held object. To skip both movements,
+launch with `close_hand_on_deactivate:=false`.
+
+An unplugged USB serial device does not stop the controllers or the other hand.
+The disconnected hand ignores commands and rejects maintenance goals. Its joint
+states retain the last measurement (the open pose if it was absent at startup).
+After reconnecting USB, stop any active trajectory and reactivate the hand hardware
+or relaunch to resume communication.
 
 ## Fingertip forces (direct serial only)
 

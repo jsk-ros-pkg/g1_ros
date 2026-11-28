@@ -46,17 +46,17 @@ By default, the driver communicates directly with the hands over USB serial. Run
 
 For a hand with custom serial settings, add e.g. `inspire_right_baudrate:=57600 inspire_right_hand_id:=2` (use `inspire_left_baudrate` and `inspire_left_hand_id` for the left hand).
 
-If a hand joint stops responding to motion commands during direct serial control, follow the [hand maintenance procedure](inspire_hand_ros2/README.md#hand-maintenance). Use `/right_hand` or `/left_hand` for the affected hand.
-
-On normal deactivation, the driver opens the hands first to help prevent the
-fingers from colliding as they close. It waits 0.8 s before sending the close command.
-Add `close_hand_on_deactivate:=false` to skip both movements.
-
-To run the hand motion demo:
+In another terminal, run the hand motion demo:
 
 ```shell
 ros2 run g1_bringup inspire_dfx_hand_open_close_demo --ros-args -p hand:=both
 ```
+
+If a hand joint stops responding to motion commands during direct serial control, follow the [hand maintenance procedure](inspire_hand_ros2/README.md#hand-maintenance). Use `/right_hand` or `/left_hand` for the affected hand.
+
+When the hand hardware is deactivated (for example, by stopping `g1_bringup.launch.py`
+with Ctrl-C), the driver opens the hands first to help prevent the fingers from colliding as they close. It waits 0.8 s before sending the close command.
+Add `close_hand_on_deactivate:=false` to skip both movements.
 
 #### DDS bridge
 
