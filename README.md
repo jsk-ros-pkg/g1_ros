@@ -60,6 +60,23 @@ To run hand motion demo
 ros2 run g1_bringup inspire_dfx_hand_open_close_demo --ros-args -p hand:=both
 ```
 
+## Motor temperatures
+
+Hardware bringup publishes G1 motor temperatures at 1 Hz as `sensor_msgs/msg/Temperature`
+(degrees Celsius), including while SONIC controls the robot. Per-joint topics are
+`/motor_temperatures/<joint_name>/casing` and `/motor_temperatures/<joint_name>/winding`.
+The readings use the joint's child TF frame and are stamped on receipt of `rt/lowstate`.
+Publication stops when no new state arrives; Inspire hand motors are not included.
+
+```shell
+ros2 topic echo /motor_temperatures/left_knee_joint/winding
+```
+
+In RViz, add a **Temperature** display for `/motor_temperatures/winding` (or `casing`).
+These shared topics contain all motor readings. Set **Decay Time** to `2` seconds,
+**Filter size** and topic **Depth** to `100` to display all motors as colored points
+at their TF positions.
+
 ## Audio playback and TTS
 
 ```shell
