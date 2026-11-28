@@ -27,6 +27,13 @@ TF topics are scoped to the hand namespace so that two hands can use the same fr
 
 Use `side:=left` for the left-hand kinematic frames. Both sides use the same six joint names. To run two standalone hands, launch each with its own `device` and `namespace` (default `inspire_hand`). The driver clears errors once on activation and starts from measured joint positions. To leave the hand in its last pose on shutdown, set `close_hand_on_deactivate:=false`.
 
+On graceful shutdown (for example Ctrl-C), the driver first commands all six axes
+open to help prevent the fingers from colliding as they close. After the hand
+acknowledges the open command, the driver waits 0.8 s before sending the closing pose.
+If the open command fails or calibration has not finished, the driver skips closing. It does not wait for
+the closing motion to finish. SIGKILL and power loss cannot run this sequence.
+Keep fingers clear; opening can release a held object.
+
 An unplugged USB serial device does not stop the controllers or the other hand.
 The disconnected hand ignores commands and rejects maintenance goals. Its joint
 states retain the last measurement (the open pose if it was absent at startup).

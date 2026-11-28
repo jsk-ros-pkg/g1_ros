@@ -216,6 +216,16 @@ def _launch_setup(context, *args, **kwargs):
         Node(
             package="controller_manager",
             executable="ros2_control_node",
+            # Allow for the G1 weight ramp (~5 s), two 800 ms dwells and serial I/O.
+            sigterm_timeout=LaunchConfiguration(
+                "sigterm_timeout",
+                default=(
+                    "12"
+                    if hand_type == "inspire_dfq"
+                    and close_hand_on_deactivate.lower() == "true"
+                    else "5"
+                ),
+            ),
             parameters=[
                 {"robot_description": robot_description},
                 controllers_yaml,

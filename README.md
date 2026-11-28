@@ -48,7 +48,9 @@ For a hand with custom serial settings, add e.g. `inspire_right_baudrate:=57600 
 
 If a hand joint stops responding to motion commands during direct serial control, follow the [hand maintenance procedure](inspire_hand_ros2/README.md#hand-maintenance). Use `/right_hand` or `/left_hand` for the affected hand.
 
-The hands close on deactivation by default. Add `close_hand_on_deactivate:=false` to disable this behavior.
+On normal deactivation, the driver opens the hands first to help prevent the
+fingers from colliding as they close. It waits 0.8 s before sending the close command.
+Add `close_hand_on_deactivate:=false` to skip both movements.
 
 To run the hand motion demo:
 

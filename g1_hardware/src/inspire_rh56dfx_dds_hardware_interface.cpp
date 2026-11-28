@@ -1,3 +1,4 @@
+#include "inspire_hand_driver/deactivation.hpp"
 #include "inspire_hand_driver/rh56dfx_hardware.hpp"
 
 #include <chrono>
@@ -81,21 +82,28 @@ private:
     state = state_->positions;
   }
 
-  void command(const Positions& target) override
+  bool publish_target(const Positions& target)
   {
     for (size_t i = 0; i < target.size(); ++i)
       message_.cmds()[i].q(static_cast<float>(target[i]));
-    publisher_->Write(message_);
+    return publisher_->Write(message_);
   }
+
+  void command(const Positions& target) override { publish_target(target); }
 
   void disconnect(const Positions* final_target) override
   {
     if (publisher_ && final_target) {
-      // Give the bridge time to receive the final command before closing the DDS channel.
-      for (int i = 0; i < 5; ++i) {
-        command(*final_target);
-        if (i < 4)
-          std::this_thread::sleep_for(std::chrono::milliseconds(20));
+      if (publish_target(Positions(final_target->size(), 1.0))) {
+        std::this_thread::sleep_for(inspire_hand_driver::deactivation::open_dwell);
+        // Give the bridge time to receive the final command.
+        for (int i = 0; i < 5; ++i) {
+          command(*final_target);
+          if (i < 4)
+            std::this_thread::sleep_for(std::chrono::milliseconds(20));
+        }
+      } else {
+        RCLCPP_WARN(get_logger(), "Failed to publish opening command; skipping shutdown close.");
       }
     }
     subscriber_.reset();

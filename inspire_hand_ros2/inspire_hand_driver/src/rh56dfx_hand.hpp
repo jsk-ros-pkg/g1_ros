@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <atomic>
 #include <condition_variable>
 #include <functional>
 #include <memory>
@@ -43,7 +44,8 @@ private:
   void send_positions(const Positions& target);
   Positions read_positions();
   void send(uint8_t op, uint16_t address, const std::vector<uint8_t>& data);
-  std::vector<uint8_t> reply(uint8_t op, uint16_t address, size_t size, int timeout_ms = 100);
+  std::vector<uint8_t> reply(uint8_t op, uint16_t address, size_t size, int timeout_ms = 100,
+                             const std::atomic<bool>* cancel = nullptr);
   void maintenance(Operation op);
   template <typename A, typename Validate, typename Execute>
   typename rclcpp_action::Server<A>::SharedPtr add_action(const rclcpp::Node::SharedPtr& node,
@@ -57,7 +59,8 @@ private:
   std::mutex mutex_;
   std::condition_variable wake_;
   Positions positions_{}, target_{};
-  bool pending_{false}, stopping_{false}, busy_{false};
+  bool pending_{false}, busy_{false}, calibration_unconfirmed_{false};
+  std::atomic<bool> stopping_{false};
   std::function<void(bool)> request_;
   std::vector<rclcpp_action::Server<Action>::SharedPtr> servers_;
   rclcpp_action::Server<SetForce>::SharedPtr force_server_;

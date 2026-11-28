@@ -1,4 +1,5 @@
 #include "rh56dfx_hand.hpp"
+#include "inspire_hand_driver/deactivation.hpp"
 
 #include <fcntl.h>
 #include <poll.h>
@@ -38,7 +39,8 @@ bool hung_up(int fd)
   return poll(&event, 1, 0) > 0 && (event.revents & (POLLERR | POLLHUP | POLLNVAL));
 }
 
-void transfer(int fd, uint8_t* buf, size_t size, bool writing, int timeout_ms)
+void transfer(int fd, uint8_t* buf, size_t size, bool writing, int timeout_ms,
+              const std::atomic<bool>* cancel = nullptr)
 {
   const auto end = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeout_ms);
   while (size) {
@@ -48,7 +50,12 @@ void transfer(int fd, uint8_t* buf, size_t size, bool writing, int timeout_ms)
     pollfd event{fd, static_cast<short>(writing ? POLLOUT : POLLIN), 0};
     if (left <= 0)
       throw std::runtime_error("Serial timeout");
-    int ready = poll(&event, 1, static_cast<int>(left));
+    if (cancel && cancel->load())
+      throw std::runtime_error("Hand deactivated during calibration");
+    int ready =
+        poll(&event, 1, cancel ? std::min(20, static_cast<int>(left)) : static_cast<int>(left));
+    if (cancel && ready == 0)
+      continue;
     if (ready < 0 && errno == EINTR)
       continue;
     if (ready <= 0 || !(event.revents & event.events))
@@ -141,10 +148,11 @@ void RH56DFXHand::send(uint8_t op, uint16_t address, const std::vector<uint8_t>&
   transfer(fd_, frame.data(), frame.size(), true, 100);
 }
 
-std::vector<uint8_t> RH56DFXHand::reply(uint8_t op, uint16_t address, size_t size, int timeout_ms)
+std::vector<uint8_t> RH56DFXHand::reply(uint8_t op, uint16_t address, size_t size, int timeout_ms,
+                                        const std::atomic<bool>* cancel)
 {
   std::vector<uint8_t> frame(size + 8);
-  transfer(fd_, frame.data(), frame.size(), false, timeout_ms);
+  transfer(fd_, frame.data(), frame.size(), false, timeout_ms, cancel);
   if (frame[0] != 0x90 || frame[1] != 0xeb || frame[2] != hand_id_ || frame[3] != size + 3 ||
       frame[4] != op || frame[5] != (address & 255) || frame[6] != (address >> 8) ||
       frame.back() != checksum(frame) || (op == kWrite && frame[7] != 1))
@@ -181,11 +189,16 @@ void RH56DFXHand::send_positions(const Positions& target)
 void RH56DFXHand::maintenance(Operation op)
 {
   const auto address = op == Operation::Calibrate ? kCalibrate : kClear;
+  if (op == Operation::Calibrate)
+    calibration_unconfirmed_ = true;
   send(kWrite, address, {1});
   reply(kWrite, address, 1);
   // RH56 series manual, example 5: calibration finishes with a status frame.
-  if (op == Operation::Calibrate && reply(kRead, 0x0002, 1, 10000)[7] != 0)
-    throw std::runtime_error("Force sensor calibration failed");
+  if (op == Operation::Calibrate) {
+    if (reply(kRead, 0x0002, 1, 10000, &stopping_)[7] != 0)
+      throw std::runtime_error("Force sensor calibration failed");
+    calibration_unconfirmed_ = false;
+  }
 }
 
 void RH56DFXHand::set_force(const SetForce::Goal& goal)
@@ -309,12 +322,18 @@ void RH56DFXHand::stop(const Positions* final_target)
   if (worker_.joinable())
     worker_.join();
   if (final_target && fd_ >= 0) {
+    if (calibration_unconfirmed_) {
+      RCLCPP_WARN(logger_, "Skipping shutdown motion: calibration unfinished.");
+      return;
+    }
     try {
+      Positions open;
+      open.fill(1.0);
+      send_positions(open);
+      std::this_thread::sleep_for(deactivation::open_dwell);
       send_positions(*final_target);
-    } catch (const std::exception&) {
-      if (!hung_up(fd_))
-        throw;
-      RCLCPP_WARN(logger_, "Hand disconnected before the final position could be sent.");
+    } catch (const std::exception& e) {
+      RCLCPP_WARN(logger_, "Stopping shutdown motion: %s", e.what());
     }
   }
 }
@@ -348,7 +367,7 @@ void RH56DFXHand::run()
     try {
       if (request)
         request(stopping);
-      if (!stopping) {
+      if (!stopping_) {
         if (write_target)
           send_positions(target);
         auto sample = read_positions();
