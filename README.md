@@ -72,10 +72,9 @@ Publication stops when no new state arrives; Inspire hand motors are not include
 ros2 topic echo /motor_temperatures/left_knee_joint/winding
 ```
 
-In RViz, add a **Temperature** display for `/motor_temperatures/winding` (or `casing`).
-These shared topics contain all motor readings. Set **Decay Time** to `2` seconds,
-**Filter size** and topic **Depth** to `100` to display all motors as colored points
-at their TF positions.
+The bringup and standalone RViz configurations show **Winding Temperature** by default.
+Disable it and enable **Casing Temperature** to switch readings. Both use RViz's standard
+Temperature display to show all motors as colored points at their TF positions.
 
 ## Audio playback and TTS
 
